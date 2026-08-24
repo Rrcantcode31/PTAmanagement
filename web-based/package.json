@@ -2,10 +2,13 @@
   "name": "ptamanagement",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
+    "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon project.js"
+    "dev": "nodemon project.js",
+    "start": "node project.js"
+  
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",
