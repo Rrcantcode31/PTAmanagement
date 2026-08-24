@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="icon" type="image/png" href="/stickers/nobg.png" />
+  <link rel="stylesheet" href="/css/sample3D.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.19.0/dist/leaflet-geoman.css" />
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script defer src="http://192.168.1.74:4570/socket.io/socket.io.js"></script>
+<script defer src="/js/sample3D.js"></script>
+  <script defer src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.19.0/dist/leaflet-geoman.min.js"> </script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+            <div class="logo-container">
+                <img src="/stickers/tracking.png" alt="Logo" class="logo" onerror="this.src='https://placehold.co/190x80?text=Dispatch+Hub'">
+            </div>
+            <nav class="nav-menu">
+                <a href="/Dashboard" class="nav-btn"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/DriverList" class="nav-btn"><i class="fas fa-users"></i> Driver list</a>
+                <a href="/DepartureLogs" class="nav-btn "><i class="fas fa-sign-out-alt"></i> Departure logs</a>
+                <a href="/vehicles" class="nav-btn"><i class="fas fa-truck"></i> Vehicles</a>
+                <a href="/SCroute" class="nav-btn"><i class="fas fa-route"></i> Routes</a>
+                <a href="/sample3D" class="nav-btn active"><i class="fas fa-view"></i> Dispatch Area</a>
+
+            </nav>
+            <div class="upload-section">
+                <a href="/farePrice" class="upload-btn active"><i class="fas fa-ticket-alt"></i> Fare Prices</a>
+            </div>
+        </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- HEADER -->
+      <header class="dashboard-header">
+        <div class="header-left">
+          <h1>Welcome, {{adminAuth.first_name}}</h1>
+          <p>3D oveview</p>
+        </div>
+
+        <div class="header-right">
+    <div class="admin-info">
+        <a href="/Logout">Logout</a>
+    </div>
+</div>
+            </header>
+
+      <section class="map-section">
+        <div class="map-card">
+          <h2>South Cotabato Terminals 3D view</h2>
+
+
+          <div id="map"></div>
+        </div>
+      </section>
+
+    </main>
+  </div> 
+
+    
+</div>
+
+</body>
+</html>

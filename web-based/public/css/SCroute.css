@@ -1,0 +1,315 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+* {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f9f9ff;
+            color: #333;
+        }
+
+        /* ========== SIDEBAR (fully preserved) ========== */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 210px;
+            height: 100vh;
+            background-color: #43aca1;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 0;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+        }
+
+        .logo-container {
+            text-align: center;
+            margin-bottom: 90px;
+            margin-top: -40px;
+            border-bottom: 1px solid #000000;
+        }
+
+        .logo-container img {
+            width: 190px;
+            height: auto;
+            border-radius: 25%;
+        }
+
+        .nav-menu {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 12px 15px;
+            margin-top: -90px;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 500;
+            padding: 12px 15px;
+            text-align: left;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-btn i {
+            width: 20px;
+            font-size: 1rem;
+        }
+
+        .nav-btn:hover,
+        .nav-btn.active {
+            background: #fff;
+            color: #6c63ff;
+            box-shadow: 0 4px 10px rgba(255, 255, 255, 0.3);
+            transform: translateX(5px);
+        }
+
+        .upload-section {
+            margin-top: auto;
+            width: 100%;
+            padding: 0 20px;
+            transform: translateX(6px);
+            margin-bottom: 30px;
+        }
+
+        .upload-btn {
+            width: 95%;
+            background: #fff;
+            color: #6c63ff;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 12px 0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Montserrat', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .upload-btn:hover {
+            background: #e6e4ff;
+            transform: translateY(-2px);
+        }
+
+/* MAIN CONTENT AREA */
+    .main-content {
+    margin-left: 210px;
+    padding: 30px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    }
+    
+/* DASHBOARD HEADER */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg,#9ce0e09f,#c9dbdb52);
+    padding: 20px 30px;
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+}
+
+.header-left h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #319086;
+}
+
+.header-left p {
+    font-size: 14px;
+    color: #555;
+}
+
+/* ADMIN INFO - TOP RIGHT CORNER */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.admin-info {
+    text-align: right;
+}
+
+.admin-info strong {
+    display: block;
+    color: #319086;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.admin-info span {
+    font-size: 13px;
+    color: #555;
+}
+
+/* =========================
+   ROUTES GRID LAYOUT
+========================= */
+
+.routes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap:0px;
+    align-items: stretch;   /* was start — this is what let them mismatch in height */
+}
+
+/* MAP CARDS */
+.map-card {
+    background: #ffffff;
+    width: 69%;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    border: 1px solid #edf1f7;
+    height: 100%; 
+}
+
+.card-header {
+    padding: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h2 {
+    color: #1f6f66;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* MAP AREA */
+.map-view {
+    width: 100%;
+    height: 590px;
+}
+
+/* =========================
+   QUEUE PANEL
+========================= */
+
+.queue-panel {
+    height: 100%;
+
+    background: #fff;
+    border: 1px solid #edf1f7;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+
+    margin-left: -180px;
+}
+
+.queue-header {
+    width: 100%;
+    background: linear-gradient(135deg,#23786f,#369d91);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+}
+
+.queue-title h2 {
+    font-size: 24px;
+    margin-bottom: 6px;
+}
+
+.queue-title p {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.route-selector select {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: none;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+
+.table-wrapper {
+      overflow-x: none;
+      padding: 5px;
+    }
+    /* Base style for header and data rows */
+
+    .head-column{
+     display: flex; 
+      background: #edf6f3;
+      border-radius: 10px;
+      padding: 14px 12px;
+      margin-bottom: 12px;
+      font-weight: 800;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #1d6b5e;
+      gap: 10px;
+      
+    }
+
+    .col-driver-name { flex: 0 0 40%; text-align: center; padding-left: 8px; }
+    .col-vehicle { flex: 0 0 40%; text-align: center; }
+    .col-id { flex: 0 0 15%; text-align: right; }
+
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1200px) {
+    .routes-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+
+    .main-content {
+        padding: 15px;
+    }
+
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .queue-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}

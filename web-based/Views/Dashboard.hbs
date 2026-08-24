@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="icon" type="image/png" href="/stickers/nobg.png" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="/js/dashboard.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+            <div class="logo-container">
+                <img src="/stickers/tracking.png" alt="Logo" class="logo" onerror="this.src='https://placehold.co/190x80?text=Dispatch+Hub'">
+            </div>
+            <nav class="nav-menu">
+                <a href="/Dashboard" class="nav-btn active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/DriverList" class="nav-btn"><i class="fas fa-users"></i> Driver list</a>
+                <a href="/DepartureLogs" class="nav-btn "><i class="fas fa-sign-out-alt"></i> Departure logs</a>
+                <a href="/vehicles" class="nav-btn"><i class="fas fa-truck"></i> Vehicles</a>
+                <a href="/SCroute" class="nav-btn"><i class="fas fa-route"></i> Routes</a>
+                <a href="/sample3D" class="nav-btn"><i class="fas fa-view"></i> Dispatch Area</a>
+            </nav>
+            <div class="upload-section">
+                <a href="/farePrice" class="upload-btn active"><i class="fas fa-ticket-alt"></i> Fare Prices</a>
+            </div>
+        </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- HEADER -->
+      <header class="dashboard-header">
+        <div class="header-left">
+          <h1>Welcome, {{adminAuth.first_name}}</h1>
+          <p>Dashboard Overview</p>
+        </div>
+
+        <div class="header-right">
+    <div class="admin-info">
+        <a href="/Logout">Logout</a>
+    </div>
+</div>
+            </header>
+
+      <section class="stats-section">
+
+      <div class="active-vehicles">
+        <h4>Active Vehicles</h4>
+       <p>0</p>
+      </div>
+
+      <div class="active-drivers">
+        <h4>Active Drivers</h24>
+       <p>0</p>
+      </div>
+
+      </section>
+
+      <section class="map-section">
+        <div class="map-card">
+          <h2>South Cotabato Terminals-map</h2>
+
+
+          <div id="map"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+    <div class="floating-actions">  
+    <button class="add-btn">Add</button>
+    <button class="update-btn">Update</button>
+    <button class="delete-btn">Delete</button>
+  </div>
+
+<!-- After map click: coordinates + editable name/address (from reverse geocode) -->
+<div id="terminal-modal" class="terminal-modal hidden" role="dialog" aria-labelledby="terminal-modal-title">
+  <h3 id="terminal-modal-title">New terminal</h3>
+  <p class="modal-field">
+    <label for="modal-name-input">Name</label>
+    <input type="text" id="modal-name-input" autocomplete="off" />
+  </p>
+  <p class="modal-field">
+    <label for="modal-address-input">Address</label>
+    <textarea id="modal-address-input" rows="3"></textarea>
+  </p>
+  <p id="modal-geocode-note" class="modal-note"></p>
+
+  <p><strong>Latitude:</strong> <span id="modal-lat"></span></p>
+  <p><strong>Longitude:</strong> <span id="modal-lng"></span></p>
+  
+  <div class="modal-actions">
+    <button type="button" id="modal-save">Save</button>
+    <button type="button" id="modal-close">Cancel</button>
+  </div>
+</div>
+
+</body>
+</html>

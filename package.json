@@ -1,0 +1,19 @@
+{
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "web": "cd web-based && npm start",
+    "mobile": "cd mobile-app && npx expo start",
+    "start": "concurrently \"npm run backend\" \"npm run web\" \"npm run mobile\" "
+  },
+  "devDependencies": {
+    "browser-sync": "^3.0.4",
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "expo": "~54.0.34",
+    "expo-blur": "~15.0.8",
+    "expo-linking": "~8.0.12",
+    "expo-web-browser": "~15.0.11",
+    "socket.io-client": "^4.8.3"
+  }
+}

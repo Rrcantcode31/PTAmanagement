@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fare Prices</title>
+  <link rel="icon" type="image/png" href="/stickers/nobg.png" />
+  <link rel="stylesheet" href="/css/farePrices.css" />
+  <script src="/js/farePrice.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+
+</head>
+<body>
+  <div class="dashboard-container">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+            <div class="logo-container">
+                <img src="/stickers/tracking.png" alt="Logo" class="logo" onerror="this.src='https://placehold.co/190x80?text=Dispatch+Hub'">
+            </div>
+            <nav class="nav-menu">
+                <a href="/Dashboard" class="nav-btn"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/DriverList" class="nav-btn"><i class="fas fa-users"></i> Driver list</a>
+                <a href="/DepartureLogs" class="nav-btn "><i class="fas fa-sign-out-alt"></i> Departure logs</a>
+                <a href="/vehicles" class="nav-btn"><i class="fas fa-truck"></i> Vehicles</a>
+                <a href="/SCroute" class="nav-btn"><i class="fas fa-route"></i> Routes</a>
+                <a href="/sample3D" class="nav-btn"><i class="fas fa-view"></i> Dispatch Area</a>
+            </nav>
+            <div class="upload-section">
+                <a href="/farePrice" class="upload-btn active"><i class="fas fa-ticket-alt"></i> Fare Prices</a>
+            </div>
+        </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- HEADER -->
+      <header class="dashboard-header">
+        <div class="header-left">
+          <h1>Welcome, {{adminAuth.first_name}}</h1>
+          <p>Fare Prices</p>
+        </div>
+
+        <div class="header-right">
+          <div class="admin-info">
+            <strong>{{adminAuth.role}}</strong>
+          </div>
+        </div>
+      </header>
+
+      <div class="floating-actions">
+      <button class="add-btn">Add</button>
+      <button class="update-btn">Update</button>
+      <button class="delete-btn">Delete</button>
+      </div>
+
+      <div id="magic-modal" class="magic-modal hidden">
+        <h3 id="magic-modal-title">Add fare by</h3>
+
+        <!-- FROM Terminal -->
+          <p class="modal-field">
+          <label for="from_terminal_id">ROUTE FROM</label>
+          <select id="from_terminal_id" name="from_terminal_id" required>
+          <option value="">Select Terminal</option>
+          </select>
+          </p>
+
+          <!-- TO terminal -->
+          <p class="modal-field">
+          <label for="terminal_id">TO: Vice VERSA</label>
+          <select id="terminal_id" name="terminal_id">
+          <option value="">Select Terminal</option>
+          </select>
+          </p>
+
+                <!-- Kilometer input -->
+          <p class="modal-field">
+          <label for="kilometer_number">Numbe of Kilometer</label>
+          <input type="text" id="kilometer_number" name="kilometer_number" required />
+          </p>
+
+          <!-- regular_tradition_price -->
+          <p class="modal-field">
+          <label for="regular_price">Traditional UVE Regular price</label>
+          <input type="text" id="regular_price" name="regular_price" required />
+          </p>
+
+          <!-- discounter_tradition_price -->
+          <p class="modal-field">
+          <label for="discounted_price">Traditional UVE Discounted price</label>
+          <input type="text" id="discounted_price" name="discounted_price" required />
+          </p>
+          
+          <!-- regular_modernize_price -->
+          <p class="modal-field">
+          <label for="regular_m_price">Modernize UVE Regular price</label>
+          <input type="text" id="regular_m_price" name="regular_m_price" required />
+          </p>
+
+          <!-- discounted_modernize_price -->
+          <p class="modal-field">
+          <label for="discounted_m_price">Modernize UVE discounted price</label>
+          <input type="text" id="discounted_m_price" name="discounted_m_price" required />
+          </p>
+
+          <div class="modal-actions">
+          <button type="button" id="modal-save">Save</button>
+          <button type="button" id="modal-close">Cancel</button>
+          </div>
+
+          </div>
+
+    
+      <!-- Fare Panel (center) -->
+      <div class="fare-panel">
+        <div class="panel-title">
+          <h2><i class="fas fa-map-pin"></i> Public Terminal Fare Prices – South Cotabato</h2>
+        </div>
+
+        <!-- Rate per KM info -->
+        <div style="padding: 0 28px; margin-top: 6px;">
+          <div class="comparison-row">
+            <span class="current-fare-label"><i class="fas fa-charging-station"></i> Current Fare Basis:</span>
+            <span class="traditional-label"><i class="fas fa-car-side"></i> Traditional UV Express: ₱2.40 / KM</span>
+            <span class="modern-label"><i class="fas fa-bolt"></i> Modernized UV Express: ₱2.50 / KM</span>
+          </div>
+        </div>
+
+        <!-- Column headers -->
+        <div class="fare-table-wrapper">
+          <div class="main-header-row">
+            <div class="col-route">ROUTE FROM</div>
+            <div class="col-vice">TO (VICE VERSA)</div>
+            <div class="col-km">KM</div>
+            <div class="col-reg-t">REGULAR (TRAD)</div>
+            <div class="col-disc-t">DISCOUNTED (TRAD)</div>
+            <div class="col-reg-m">REGULAR (MOD)</div>
+            <div class="col-disc-m">DISCOUNTED (MOD)</div>
+          </div>
+          
+          <div id="displayFarePrices">
+            <!-- dynamic content will be injected here -->
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+
+</body>
+</html>

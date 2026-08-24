@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Driver List</title>
+    <link rel="icon" type="image/png" href="/stickers/nobg.png" />
+    <link rel="stylesheet" href="css/DriverList.css" />
+    <script src="/js/DriverList.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="/stickers/tracking.png" alt="Logo" class="logo" onerror="this.src='https://placehold.co/190x80?text=Dispatch+Hub'">
+            </div>
+            <nav class="nav-menu">
+                <a href="/Dashboard" class="nav-btn"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/DriverList" class="nav-btn active"><i class="fas fa-users"></i> Driver list</a>
+                <a href="/DepartureLogs" class="nav-btn "><i class="fas fa-sign-out-alt"></i> Departure logs</a>
+                <a href="/vehicles" class="nav-btn"><i class="fas fa-truck"></i> Vehicles</a>
+                <a href="/SCroute" class="nav-btn"><i class="fas fa-route"></i> Routes</a>
+                <a href="/sample3D" class="nav-btn"><i class="fas fa-view"></i> Dispatch Area</a>
+            </nav>
+            <div class="upload-section">
+                <a href="/farePrice" class="upload-btn active"><i class="fas fa-ticket-alt"></i> Fare Prices</a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="dashboard-header">
+                <div class="header-left">
+                    <h1>Welcome, {{adminAuth.first_name}}</h1>
+                    <p>Driver list</p>
+                </div>
+                
+                <div class="header-right">
+          <div class="admin-info">
+            <strong>{{adminAuth.role}}</strong>
+        </div>
+            </header>
+
+    <div class="floating-actions">  
+    <button class="add-btn">Add</button>
+    <button class="update-btn">Edit</button>
+    <button class="delete-btn">Delete</button>
+    </div>        
+
+    <div id="magic-modal" class="magic-modal hidden">
+  <h3 id="magic-modal-title">Add New Driver</h3>
+
+  <!-- EMAIL -->
+  <p class="modal-field">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" placeholder="Email" required />
+  </p>
+
+  <!-- PASSWORD -->
+  <p class="modal-field">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="Password at least 8 characters" required />
+  </p>
+
+  <!-- FIRST NAME -->
+  <p class="modal-field">
+    <label for="first_name">First Name</label>
+    <input type="text" id="first_name" name="first_name" required />
+  </p>
+
+  <!-- MIDDLE NAME -->
+  <p class="modal-field">
+    <label for="middle_name">Middle Initial</label>
+    <input type="text" id="middle_name" name="middle_name" placeholder="(Optional)" />
+  </p>
+
+  <!-- LAST NAME -->
+  <p class="modal-field">
+    <label for="last_name">Last Name</label>
+    <input type="text" id="last_name" name="last_name" required />
+  </p>
+
+  <!-- CONTACT -->
+    <p class="modal-field">
+    <label for="contact_number">Contact Number</label>
+    <input type="text" id="contact_number" name="contact_number" required />
+    </p>
+
+    <p class="modal-field">
+    <label for="plate_number">Plate Number</label>
+    <input type="text" id="plate_number" name="plate_number" required />
+    </p>
+
+     <!-- VEHICLE DROPDOWN -->
+    <p class="modal-field">
+    <label for="type_id">Vehicle Type</label>
+    <select id="type_id" name="type_id" required>
+    <option value="">Select Vehicle</option>
+    </select>
+    </p>
+
+    <!-- TERMINAL DROPDOWN -->
+    <p class="modal-field">
+    <label for="terminal_id">Terminal</label>
+    <select id="terminal_id" name="terminal_id">
+    <option value="">Select Terminal</option>
+    </select>
+    </p>
+
+    <!-- STATUS -->
+    <input type="hidden" name="status" value="Inactive" />
+
+    <!-- HIDDEN ROLE -->
+    <input type="hidden" id="role_id" name="role_id" value="2" />
+
+    <div class="modal-actions">
+    <button type="button" id="modal-save">Save</button>
+    <button type="button" id="modal-close">Cancel</button>
+    </div>
+    </div>
+
+    <div class="driver-panel">
+      <div class="panel-title">
+        <h2>Public Termianl Drivers - Vehicles</h2>
+        </div>
+
+        <div class="table-wrapper">
+        <div class="head-column">
+          <div class="col-vehicle">Vehicle-use</div>
+          <div class="col-driver-name">Driver-Full name</div>
+          <div class="col-cont-no">Contact number</div>
+          <div class="col-status">Status</div>
+          <div class="col-plate-no">Plate-number</div>
+        </div>
+        
+
+        <!-- Table Data -->
+        <div id="regionalPriceContainer">
+        </div>
+        </div>
+      </div>
+     
+    
+</body>
+</html> 

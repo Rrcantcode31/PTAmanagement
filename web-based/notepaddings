@@ -1,0 +1,20 @@
+ //show active drivers
+  *show active drivers when already queued
+ //active vehicles
+  *show active vehicles when already queued
+  *departure logs record vehicle when already moving after it's turn for travel
+ //make the queueing work
+  *make queueing work by using the drivers location based, identified and validated by polygon using lat, long
+ //make the departure logs work
+  *departure logs work by using a validation of drivers moving from the exact drivers location 
+  dispatch area records a departure log of a single driver/vehicle record
+
+
+  // SOP / Objectives
+   * 3 admin  / driver management focused 
+
+  // SOP / Objectives 
+   * 1 commuter focused 
+
+
+  
