@@ -2,6 +2,10 @@ const express = require("express");
 const router = express.Router();
 const authController = require("../controller/backendController");
 
+router.get("/", (req, res) => {
+    res.redirect("/Login");
+});
+
 function ViewLogin(req, res) {
   if (req.session.adminAuth) {
     return res.redirect("/Dashboard");

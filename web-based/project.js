@@ -69,9 +69,10 @@ app.set('view engine', 'hbs');
 app.use('/', pagesAuth);
 app.use('/', routeAuth);
 
-
+const PORT = process.env.PORT || 4560;
 
 function PortListener() {
-    console.log("🚀 SERVER RUNNING ON PORT 4560");
+    console.log(`🚀 SERVER RUNNING ON PORT ${PORT}`);
 }
-app.listen(4560, '0.0.0.0', PortListener);
+
+app.listen(PORT, '0.0.0.0', PortListener);
