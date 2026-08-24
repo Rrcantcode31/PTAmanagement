@@ -10,7 +10,7 @@ function ViewLogin(req, res) {
   if (req.session.adminAuth) {
     return res.redirect("/Dashboard");
   }
-  return res.render("Login.hbs");
+  return res.render("Login");
 }
 router.get("/Login", ViewLogin);
 
