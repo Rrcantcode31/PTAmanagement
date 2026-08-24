@@ -1,18 +1,8 @@
-const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { error } = require('console');
-
-const dbPool = mysql.createPool({
-    host: process.env.MYSQLHOST,
-    port: Number(process.env.MYSQLPORT),
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    waitForConnections: true,
-    connectionLimit: 10
-});
+const dbPool = require('../dbPool')
 
 //Admin Login
 exports.Login = async (req, res) => {

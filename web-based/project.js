@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const path = require("path");
 const dotenv = require("dotenv");
 const cookieParser = require('cookie-parser');
+const dbPool = require('./dbPool')
 const hbs = require('hbs');
 const session = require('express-session');
 const cors = require('cors');
@@ -18,31 +19,17 @@ hbs.registerHelper('eq', (a, b) => a === b);
 const publicDirectory = path.join(__dirname, './public');
 app.use(express.static(publicDirectory));
 
-
-const dbPool = mysql.createPool({
-    host: process.env.MYSQLHOST,
-    port: Number(process.env.MYSQLPORT),
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    waitForConnections: true,
-    connectionLimit: 10
-});
-
-dbPool.getConnection()
-    .then(connection => {
-        connection.release();
-        console.log("✅ Database connected successfully!");
-    })
-    .catch(err => {
+dbPool.getConnection((err, connection) => {
+    if (err) {
         console.error("❌ Database Connection failed:", err);
         console.error("Error code:", err.code);
         console.error("Error errno:", err.errno);
         console.error("Full error stringified:", JSON.stringify(err, null, 2));
-    });
-
-module.exports = dbPool;
-
+        return;
+    }
+    connection.release();
+    console.log("✅ Database connected successfully!");
+});
 
 app.use(cors());
 app.use(express.urlencoded({ extended: false }));
