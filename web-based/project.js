@@ -21,7 +21,7 @@ app.use(express.static(publicDirectory));
 
 const dbPool = mysql.createPool({
     host: process.env.DATABASE_NAME,
-    port: process.env.DATABASE_PORT,
+    port: Number(process.env.DATABASE_PORT),
     user: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASS,
     database: process.env.DATABASE,
@@ -35,7 +35,10 @@ dbPool.getConnection()
         console.log("✅ Database connected successfully!");
     })
     .catch(err => {
-        console.error("❌ Database Connection failed:", err.message);
+        console.error("❌ Database Connection failed:", err);
+        console.error("Error code:", err.code);
+        console.error("Error errno:", err.errno);
+        console.error("Full error stringified:", JSON.stringify(err, null, 2));
     });
 
 module.exports = dbPool;

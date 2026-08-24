@@ -5,12 +5,13 @@ const crypto = require('crypto');
 const { error } = require('console');
 
 const dbPool = mysql.createPool({
-  host: process.env.DATABASE_NAME,
-  port: process.env.DATABASE_PORT,
-  user: process.env.DATABASE_USER,
-  password: process.env.DATABASE_PASS,
-  database: process.env.DATABASE,
-  waitForConnections: true
+    host: process.env.DATABASE_NAME,
+    port: Number(process.env.DATABASE_PORT),
+    user: process.env.DATABASE_USER,
+    password: process.env.DATABASE_PASS,
+    database: process.env.DATABASE,
+    waitForConnections: true,
+    connectionLimit: 10
 });
 
 //Admin Login
