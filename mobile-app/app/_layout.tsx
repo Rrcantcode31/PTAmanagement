@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "../appContext/authContext" ;
 
-export const API_URL = "http://192.168.1.74:4570";
+export const API_URL = "https://ptamanagement-production.up.railway.app";
 
 export default function RootLayout() {
   return(

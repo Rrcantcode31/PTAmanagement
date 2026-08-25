@@ -17,7 +17,8 @@ app.use(cors({
       "http://localhost:4570",
       "http://192.168.1.74:4570",
       "http://localhost:4560",
-      "http://192.168.1.74:4560"
+      "http://192.168.1.74:4560",
+      "https://ptamanagement-production.up.railway.app"
     ],
     credentials: true
 }));
