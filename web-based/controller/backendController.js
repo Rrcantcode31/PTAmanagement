@@ -24,9 +24,9 @@ exports.Login = async (req, res) => {
       i.middle_name,
       i.last_name,
       i.contact_number
-   FROM adminAuth a
+   FROM adminauth a
    JOIN roles r ON a.role_id = r.role_id
-   JOIN Admin_info i ON a.admin_id = i.admin_id
+   JOIN admin_info i ON a.admin_id = i.admin_id
    WHERE a.email = ?`,
   [email]
   );
@@ -99,9 +99,9 @@ exports.isLoggedIn = async (req, res, next) => {
           i.first_name,
           i.last_name,
           i.contact_number
-        FROM adminAuth a
+        FROM adminauth a
         JOIN roles r ON a.role_id = r.role_id
-        JOIN Admin_info i ON a.admin_id = i.admin_id
+        JOIN admin_info i ON a.admin_id = i.admin_id
         WHERE a.admin_id = ?`,
         [decoded.admin_id],
         (err, results) => {
@@ -504,7 +504,7 @@ exports.UpdateDriverCred = async (req, res) => {
       }
     }
 
-    const connection = await db.promise().getConnection();
+    const connection = await dbPool.promise().getConnection();
     await connection.beginTransaction();
 
     try {
@@ -687,7 +687,6 @@ exports.InsertFarePrice = async (req, res) => {
       const {from_terminal_id,
              to_terminal_id,
              kilometer,
-             
              bounds_id,
              regular_t,
              discounted_t,
@@ -792,7 +791,7 @@ exports.DeleteDriverInfo = async (req, res) => {
         .json({ success: false, message: "driver_id is required" });
     }
 
-    const connection = await db.promise().getConnection();
+    const connection = await dbPool.promise().getConnection();
     await connection.beginTransaction();
 
     try {
