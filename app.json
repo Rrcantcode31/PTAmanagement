@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "8f993794-39d8-4eeb-abd1-dc229d487ae2"
+      }
+    },
+    "android": {
+      "package": "com.rrcantcode31.ptamanagement"
+    }
+  }
+}
