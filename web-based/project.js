@@ -39,7 +39,11 @@ app.use(cookieParser());
 app.use(session({
     secret: process.env.TOKEN_PASSWORD,
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    store: sessionStore,
+    cookie: {
+        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days, adjust as needed
+    }
 }));
 
 app.use((req, res, next) => {
