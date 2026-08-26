@@ -11,7 +11,7 @@ export function initSocket(server) {
         "http://localhost:4560",
         "http://192.168.1.74:4560",
         "https://ptamanagement-production.up.railway.app",
-        "https://observant-art-production-e4f0.up.railway.app" // <-- add web-based's actual public URL
+        "https://pta-management-4yrprjct.up.railway.app"
       ],
       credentials: true,
     },
