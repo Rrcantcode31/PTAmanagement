@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const dbPool = require('./dbPool')
 const hbs = require('hbs');
 const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
 const cors = require('cors');
 
 dotenv.config({path: './.env' });
@@ -29,6 +30,12 @@ dbPool.getConnection((err, connection) => {
     }
     connection.release();
     console.log("✅ Database connected successfully!");
+});
+
+const sessionStore = new MySQLStore({}, dbPool);
+
+sessionStore.on('error', function (error) {
+    console.error('Session store error:', error);
 });
 
 app.use(cors());
