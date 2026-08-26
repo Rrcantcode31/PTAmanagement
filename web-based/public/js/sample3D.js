@@ -706,7 +706,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Point explicitly at the backend server — the admin page (web-based,
     // port 4560) and the Socket.IO server (backend, port 4570) are two
     // separate Express apps, so a same-origin io() call won't reach it.
-    const socket = io('http://192.168.1.74:4570');
+    const socket = io('https://ptamanagement-production.up.railway.app');
 
     socket.on('connect', function () {
       console.log('Connected to server:', socket.id);
