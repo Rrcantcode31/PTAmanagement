@@ -29,7 +29,11 @@ export function registerDriverHandlers(io, socket) {
       let matchedZone = null;
 
       for (const zone of zones) {
-        const geoJson = JSON.parse(zone.boundary);
+        const geoJson =
+          typeof zone.boundary === "string"
+            ? JSON.parse(zone.boundary)
+            : zone.boundary;
+
         const polygon = turf.polygon(geoJson.coordinates);
 
         // Buffer the polygon by 15 meters (true geodesic distance,
