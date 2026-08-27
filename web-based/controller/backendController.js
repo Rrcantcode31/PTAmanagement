@@ -646,7 +646,6 @@ exports.UpdateDriverCred = async (req, res) => {
 };
 
 // Get driver info for driver list
-// Get driver info for driver list
 exports.getDriverInfo = async (req, res) => {
   try {
     const driver_info = `
