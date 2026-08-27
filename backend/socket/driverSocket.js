@@ -1,4 +1,5 @@
 import db from "../config/env.js"; // adjust to your actual db import path
+import * as turf from "@turf/turf";
 
 export function registerDriverHandlers(io, socket) {
   socket.on("location:update", async ({ driverId, latitude, longitude }) => {
@@ -14,34 +15,47 @@ export function registerDriverHandlers(io, socket) {
 
       const terminalId = driverRows[0].terminal_id;
 
-      // Check if the point falls inside an active dispatch zone
-      // for the driver's assigned terminal
-      const [zoneMatch] = await db.promise().query(
-        `SELECT zone_id, zone_name
+      // Fetch active zones for this terminal, with boundary as GeoJSON
+      const [zones] = await db.promise().query(
+        `SELECT zone_id, zone_name, ST_AsGeoJSON(boundary) AS boundary
            FROM dispatch_zones
           WHERE terminal_id = ?
-            AND is_active = 1
-            AND ST_Contains(boundary, ST_SRID(POINT(?, ?), 4326))
-          LIMIT 1`,
-        [terminalId, longitude, latitude]
+            AND is_active = 1`,
+        [terminalId]
       );
 
-      const insideZone = zoneMatch.length > 0;
+      const driverPoint = turf.point([longitude, latitude]);
+
+      let matchedZone = null;
+
+      for (const zone of zones) {
+        const geoJson = JSON.parse(zone.boundary);
+        const polygon = turf.polygon(geoJson.coordinates);
+
+        // Buffer the polygon by 15 meters (true geodesic distance,
+        // accounts for real-world GPS drift near buildings/foliage)
+        const bufferedPolygon = turf.buffer(polygon, 0.015, { units: "kilometers" });
+
+        if (turf.booleanPointInPolygon(driverPoint, bufferedPolygon)) {
+          matchedZone = zone;
+          break;
+        }
+      }
+
+      const insideZone = matchedZone !== null;
       const newStatus = insideZone ? "ACTIVE" : "INACTIVE";
 
-      // Only the status is written to the DB — lat/lng is never stored
       await db.promise().query(
         `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
         [newStatus, driverId]
       );
 
-      // Broadcast the driver's live position + status to all subscribed admins
       io.to("admins").emit("driver:location", {
         driverId,
         latitude,
         longitude,
         status: newStatus,
-        zone: insideZone ? zoneMatch[0].zone_name : null,
+        zone: insideZone ? matchedZone.zone_name : null,
         timestamp: Date.now(),
       });
 

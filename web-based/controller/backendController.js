@@ -646,6 +646,7 @@ exports.UpdateDriverCred = async (req, res) => {
 };
 
 // Get driver info for driver list
+// Get driver info for driver list
 exports.getDriverInfo = async (req, res) => {
   try {
     const driver_info = `
@@ -659,6 +660,7 @@ exports.getDriverInfo = async (req, res) => {
       d.last_name,
       d.contact_number,
       d.terminal_id,
+      tl.terminal_name,
       r.status,
       t.vehicle_id,
       t.plate_number
@@ -666,6 +668,7 @@ exports.getDriverInfo = async (req, res) => {
       LEFT JOIN driverauth r ON d.driver_id = r.driver_id
       LEFT JOIN vehicles t ON d.vehicle_id = t.vehicle_id
       LEFT JOIN vehicle_types v ON  t.type_id = v.type_id
+      LEFT JOIN terminal_locations tl ON d.terminal_id = tl.terminal_id
       `;
 
       dbPool.query(driver_info, (err, result) => {

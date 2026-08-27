@@ -178,53 +178,95 @@
   display: none !important;
 }
 
-/* TAB HEADER */
+/* TAB HEADER — segmented pill control */
 .tab-header {
-            display: flex;
-            gap: 16px;
-            margin-bottom: 28px;
-            border-bottom: 2px solid #e2eceb;
-            padding-bottom: 6px;
-        }
+    display: inline-flex;
+    gap: 4px;
+    margin-bottom: 28px;
+    background: #eef5f4;
+    padding: 6px;
+    border-radius: 50px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+}
 
-        .tab-btn {
-            background: transparent;
-            border: none;
-            padding: 12px 28px;
-            font-family: 'Montserrat', sans-serif;
-            font-size: 16px;
-            font-weight: 600;
-            color: #5f7c77;
-            cursor: pointer;
-            transition: 0.2s;
-            border-radius: 40px;
-            position: relative;
-        }
+.tab-btn {
+    background: transparent;
+    border: none;
+    padding: 10px 26px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #5f7c77;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
-        .tab-btn i {
-            margin-right: 8px;
-            font-size: 1rem;
-        }
+.tab-btn i {
+    font-size: 0.95rem;
+}
 
-        .tab-btn:hover {
-            color: #2c7a6e;
-            background: #eef5f4;
-        }
+.tab-btn:hover {
+    color: #2c7a6e;
+}
 
-        .tab-btn.active {
-            color: #2c7a6e;
-            background: #e0f0ee;
-        }
+.tab-btn.active {
+    color: #ffffff;
+    background: #319086;
+    box-shadow: 0 3px 8px rgba(49, 144, 134, 0.35);
+}
 
-/* PANEL */
+/* PANEL — now just a vertical container for terminal groups */
 .tab-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  background: #c9dbdb76;
-  padding: 25px;
-  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   min-height: 300px;
+}
+
+/* TERMINAL GROUP */
+.terminal-group {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  border: 1px solid #edf3f3;
+}
+
+.terminal-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eef5f4;
+  color: #2c7a6e;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.terminal-group-header i {
+  font-size: 15px;
+  color: #319086;
+}
+
+.terminal-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f7c77;
+  background: #eef5f4;
+  padding: 4px 12px;
+  border-radius: 50px;
+}
+
+.terminal-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 /* VEHICLE CARD */

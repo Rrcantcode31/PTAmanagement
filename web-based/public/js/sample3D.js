@@ -378,7 +378,7 @@ document.addEventListener('DOMContentLoaded', function () {
       GET_DISPATCH_ZONE_API,
       {
         method: 'GET',
-        credentials: 'include', // sends the session cookie so isLoggedIn can authenticate the request
+        credentials: 'include', 
         headers: {
           'Accept': 'application/json'
         }
