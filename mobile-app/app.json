@@ -22,7 +22,7 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#a6e6e0",
-        "foregroundImage": "./assets/images/react-logo.png",
+        "foregroundImage": "./assets/images/logo-app.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },

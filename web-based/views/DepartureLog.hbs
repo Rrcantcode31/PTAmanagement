@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Departure Logs | Dispatch List</title>
-    <link rel="icon" type="image/png" href="/stickers/nobg.png" />
+    <link rel="icon" type="image/png" href="/stickers/logo-sys.png" />
     <link rel="stylesheet" href="/css/departure.css" />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
@@ -60,26 +60,25 @@
                 </div>
                 <div class="table-container">
                     <table class="departure-table" id="departureTable">
-                        <thead>
-                            <tr>
-                                <th>Driver</th>
-                                <th>Route</th>
-                                <th>Vehicle</th>
-                                <th>Departure Time</th>
-                                <th>ETA</th>
-                                <th>Status</th>
-                                <th>Log ID</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody">
-                            <tr class="empty-row">
-                                <td colspan="7">
-                                    <i class="fas fa-cloud-upload-alt" style="font-size: 1.8rem; opacity: 0.6; display: block; margin-bottom: 8px;"></i>
-                                    No departure logs loaded. Data will appear here.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                       <table class="departure-table" id="departureTable">
+                            <thead>
+                                <tr>
+                                    <th>Plate Number</th>
+                                    <th>Driver Name</th>
+                                    <th>Arrival Time</th>
+                                    <th>Departure Time</th>
+                                    <th>Log ID</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr class="empty-row">
+                                    <td colspan="5">
+                                        <i class="fas fa-cloud-upload-alt" style="font-size: 1.8rem; opacity: 0.6; display: block; margin-bottom: 8px;"></i>
+                                        No departure logs loaded. Data will appear here.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                 </div>
                 <div class="log-stats">
                     <div><i class="fas fa-chart-line"></i> <span id="logCount">0</span> total departures</div>

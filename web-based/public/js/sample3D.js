@@ -717,38 +717,59 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error('Socket connection failed:', err.message);
     });
 
-    socket.on('driver:location', function (data) {
+  socket.on('driver:location', function (data) {
 
-      console.log('driver:location received:', data);
+    console.log('========== DRIVER GPS ==========');
+    console.log('Driver ID:', data.driverId);
+    console.log('Latitude:', data.latitude);
+    console.log('Longitude:', data.longitude);
+    console.log('Status:', data.status);
+    console.log('Zone:', data.zone);
+    console.log('================================');
 
-      const driverId = data.driverId;
-      const latitude = data.latitude;
-      const longitude = data.longitude;
-      const status = data.status;
-      const zone = data.zone;
+    const driverId = data.driverId;
 
-      const icon = driverDotIcon(status);
-      const popupText = `Driver #${driverId} — ${status}${zone ? ` (${zone})` : ''}`;
+    const latitude = Number(data.latitude);
+    const longitude = Number(data.longitude);
 
-      if (driverMarkers[driverId]) {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        console.error('Invalid GPS coordinates:', data);
+        return;
+    }
 
-        driverMarkers[driverId].setLatLng([latitude, longitude]);
+    const status = data.status;
+    const zone = data.zone;
+
+    const icon = driverDotIcon(status);
+    const popupText =
+        `Driver #${driverId} — ${status}${zone ? ` (${zone})` : ''}`;
+
+    if (driverMarkers[driverId]) {
+
+        driverMarkers[driverId].setLatLng([
+            latitude,
+            longitude
+        ]);
+
         driverMarkers[driverId].setIcon(icon);
         driverMarkers[driverId].setPopupContent(popupText);
 
-      } else {
+    } else {
 
-        driverMarkers[driverId] = L.marker([latitude, longitude], { icon: icon })
-          .addTo(map)
-          .bindPopup(popupText);
+        driverMarkers[driverId] =
+            L.marker(
+                [latitude, longitude],
+                { icon: icon }
+            )
+            .addTo(map)
+            .bindPopup(popupText);
 
-        // Pan/zoom to the driver the first time we see them, since they
-        // may be outside the map's current view otherwise.
-        map.setView([latitude, longitude], 18);
-
-      }
-
-    });
+        map.setView(
+            [latitude, longitude],
+            18
+        );
+    }
+});
 
     socket.on('driver:offline', function (data) {
 
