@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "PTA-app",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo-app.png",
     "scheme": "mobileapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
