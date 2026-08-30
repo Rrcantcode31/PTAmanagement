@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const defaultLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxBounds: southCotabatoBounds,
     minZoom: 18,
-    maxZoom: 20,
+    maxZoom: 19.8,
     attribution: '&copy; OpenStreetMap contributors'
   });
 
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxBounds: southCotabatoBounds,
     minZoom: 18,
-    maxZoom: 20,
+    maxZoom: 19.7,
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
   });
 
