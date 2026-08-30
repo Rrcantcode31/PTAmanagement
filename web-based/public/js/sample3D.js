@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // CONFIGURATION
   // ==================================================
 
-  const CENTER = [6.4064762, 124.8046827]; // Rang-ay Barangay Hall, Banga, South Cotabato
+  const CENTER = [6.484930018163429, 124.85256782815206]; // Rang-ay Barangay Hall, Banga, South Cotabato
 
   // Adjust the prefix to match wherever your router is mounted,
   // e.g. app.use('/dispatch', dispatchRouter) -> '/dispatch/getDispatchAreZone'

@@ -36,11 +36,20 @@ export function registerDriverHandlers(io, socket) {
 
         const polygon = turf.polygon(geoJson.coordinates);
 
-        // Buffer the polygon by 15 meters (true geodesic distance,
-        // accounts for real-world GPS drift near buildings/foliage)
-        const bufferedPolygon = turf.buffer(polygon, 0.015, { units: "kilometers" });
+        const insideOriginal = turf.booleanPointInPolygon(
+          driverPoint,
+          polygon
+        );
 
-        if (turf.booleanPointInPolygon(driverPoint, bufferedPolygon)) {
+        console.log("========== GEOFENCE DEBUG ==========");
+        console.log("Driver:", driverId);
+        console.log("Terminal:", terminalId);
+        console.log("Zone:", zone.zone_name);
+        console.log("GPS:", latitude, longitude);
+        console.log("Inside exact polygon:", insideOriginal);
+        console.log("====================================");
+
+        if (insideOriginal) {
           matchedZone = zone;
           break;
         }
@@ -48,6 +57,7 @@ export function registerDriverHandlers(io, socket) {
 
       const insideZone = matchedZone !== null;
       const newStatus = insideZone ? "ACTIVE" : "INACTIVE";
+
 
       await db.promise().query(
         `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
