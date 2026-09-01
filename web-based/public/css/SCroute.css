@@ -185,7 +185,7 @@
 
 /* MAP CARDS */
 .map-card {
-    background: #ffffff;
+    background: linear-gradient(90deg,#cbf0f0a4,#c9dbdb70);
     width: 69%;
     border-radius: 15px;
     overflow: hidden;

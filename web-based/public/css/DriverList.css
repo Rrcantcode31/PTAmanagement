@@ -386,3 +386,334 @@
     transform: translateY(-3px);
 
     }
+
+    /* =====================================================
+    VALIDATION / CONFIRMATION MODAL
+    ===================================================== */
+
+    .validation-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    }
+
+    .validation-modal.hidden {
+    display: none;
+    }
+
+    /* Dark background */
+    .validation-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    }
+
+    /* Modal panel */
+    .validation-modal-panel {
+    position: relative;
+    width: min(430px, calc(100% - 40px));
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 30px 30px 25px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: validationModalAppear 0.2s ease-out;
+    }
+
+    /* Icon */
+    .validation-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #fff3cd;
+    font-size: 28px;
+    }
+
+    /* Title */
+    .validation-modal-panel h3 {
+    margin: 0 0 10px;
+    font-size: 21px;
+    font-weight: 700;
+    color: #123f3b;
+    }
+
+    /* Message */
+    .validation-modal-panel p {
+    margin: 0 auto 25px;
+    max-width: 350px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #555;
+    }
+
+    /* Buttons */
+    .validation-modal-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    }
+
+    /* General button */
+    .validation-btn {
+    min-width: 110px;
+    padding: 11px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease,
+        opacity 0.15s ease;
+    }
+
+    .validation-btn:hover {
+    transform: translateY(-1px);
+    }
+
+    .validation-btn:active {
+    transform: translateY(0);
+    }
+
+    /* Cancel */
+    .validation-cancel-btn {
+    background: #e9eefc;
+
+    color: #24446f;
+    }
+
+    /* Confirm */
+    .validation-confirm-btn {
+    background: #315d91;
+
+    color: white;
+    }
+
+    .validation-confirm-btn:hover {
+    opacity: 0.9;
+    }
+
+    /* =====================================================
+    WARNING STATE
+    ===================================================== */
+    .validation-modal.warning .validation-icon {
+    background: #fff3cd;
+    }
+
+    .validation-modal.warning .validation-confirm-btn {
+    background: #315d91;
+    }
+
+    /* =====================================================
+    DELETE STATE
+    ==================================================== */
+    .validation-modal.delete .validation-icon {
+    background: #fde8e8;
+    }
+
+    .validation-modal.delete .validation-confirm-btn {
+    background: #c0392b;
+    }
+
+
+    /* =====================================================
+    SUCCESS STATE
+    ===================================================== */
+    .validation-modal.success .validation-icon {
+    background: #e5f7ec;
+    }
+
+    .validation-modal.success .validation-confirm-btn {
+    background: #218c52;
+    }
+
+
+    /* =====================================================
+    ERROR STATE
+    ===================================================== */
+    .validation-modal.error .validation-icon {
+    background: #fde8e8;
+    }
+
+    .validation-modal.error .validation-confirm-btn {
+    background: #c0392b;
+    }
+
+
+    /* =====================================================
+    ANIMATION
+    ===================================================== */
+
+    @keyframes validationModalAppear {
+
+    from {
+        opacity: 0;
+
+        transform:
+        translateY(10px)
+        scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+
+        transform:
+        translateY(0)
+        scale(1);
+    }
+
+    }
+
+        /* =========================================================
+    DELETE DRIVER MODAL
+    ========================================================= */
+
+    .delete-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 9999;
+    padding: 20px;
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s ease;
+    }
+
+    /* Hidden state */
+    .delete-modal.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    }
+
+
+    /* Modal card */
+
+    .delete-modal-card {
+    width: min(430px, 100%);
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 30px;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.25);
+    transform: translateY(0) scale(1);
+    transition:
+        transform 0.2s ease;
+    }
+
+
+    .delete-modal.hidden .delete-modal-card {
+    transform: translateY(10px) scale(0.96);
+    }
+
+    /* Warning icon */
+    .delete-modal-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    background: #fff0ed;
+    color: #d85a30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    font-weight: 700;
+    border: 2px solid #f5c4b6;
+    }
+
+    /* Content */
+    .delete-modal-content {
+    text-align: center;
+    }
+
+    .delete-modal-content h2 {
+    margin: 0 0 12px;
+    font-size: 24px;
+    color: #163f3d;
+    }
+
+    .delete-modal-content p {
+    margin: 8px 0;
+    color: #555;
+    line-height: 1.5;
+    font-size: 15px;
+    }
+
+
+    .delete-modal-content strong {
+    color: #163f3d;
+    }
+
+    .delete-warning {
+    font-size: 13px !important;
+    color: #888 !important;
+    margin-top: 14px !important;
+    }
+
+
+    /* Buttons */
+    .delete-modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 25px;
+    }
+
+    .delete-modal-actions button {
+    flex: 1;
+    height: 44px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform 0.15s ease,
+        opacity 0.15s ease;
+    }
+
+    .delete-modal-actions button:hover {
+    transform: translateY(-1px);
+    }
+
+    .delete-modal-actions button:active {
+    transform: translateY(0);
+    }
+
+    /* Cancel */
+    .delete-cancel-btn {
+    background: #eeeeee;
+    color: #444;
+    }
+
+    .delete-cancel-btn:hover {
+    background: #e4e4e4;
+    }
+
+    /* Delete */
+    .delete-confirm-btn {
+    background: #d85a30;
+    color: #ffffff;
+    }
+
+    .delete-confirm-btn:hover {
+    opacity: 0.9;
+    }
+
+    /* Loading state */
+    .delete-confirm-btn.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+    }

@@ -23,7 +23,7 @@
                 <a href="/DepartureLogs" class="nav-btn "><i class="fas fa-sign-out-alt"></i> Departure logs</a>
                 <a href="/vehicles" class="nav-btn"><i class="fas fa-truck"></i> Vehicles</a>
                 <a href="/SCroute" class="nav-btn"><i class="fas fa-route"></i> Routes</a>
-                <a href="/sample3D" class="nav-btn"><i class="fas fa-view"></i> Dispatch Area</a>
+                <a href="/sample3D" class="nav-btn "><i class="fas fa-map-marked-alt"></i> Dispatch Area</a>
             </nav>
             <div class="upload-section">
                 <a href="/farePrice" class="upload-btn active"><i class="fas fa-ticket-alt"></i> Fare Prices</a>
@@ -141,6 +141,99 @@
         </div>
         </div>
       </div>
+
+        <!-- =====================================================
+        VALIDATION / CONFIRMATION MODAL
+        ===================================================== -->
+    <div id="validation-modal" class="validation-modal hidden">
+
+      <div class="validation-modal-overlay"></div>
+
+      <div class="validation-modal-panel">
+
+        <div id="validation-icon" class="validation-icon">
+          ⚠️
+        </div>
+
+        <h3 id="validation-title">
+          Warning
+        </h3>
+
+        <p id="validation-message">
+          Please select a driver first.
+        </p>
+
+        <div class="validation-modal-buttons">
+
+          <button
+            type="button"
+            id="validation-cancel"
+            class="validation-btn validation-cancel-btn">
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            id="validation-confirm"
+            class="validation-btn validation-confirm-btn">
+            OK
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+      <!-- =========================================================
+         DELETE DRIVER CONFIRMATION MODAL
+      ========================================================= -->
+
+    <div id="deleteDriverModal" class="delete-modal hidden">
+
+      <div class="delete-modal-card">
+
+        <div class="delete-modal-icon">
+          !
+        </div>
+
+        <div class="delete-modal-content">
+
+          <h2>Delete Driver?</h2>
+
+          <p>
+            Are you sure you want to permanently delete
+            <strong id="deleteDriverName">this driver</strong>?
+          </p>
+
+          <p class="delete-warning">
+            This action cannot be undone. The driver's
+            information and authentication account will be deleted.
+          </p>
+
+        </div>
+
+        <div class="delete-modal-actions">
+
+          <button
+            type="button"
+            id="deleteCancelBtn"
+            class="delete-cancel-btn">
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            id="deleteConfirmBtn"
+            class="delete-confirm-btn">
+            Delete Driver
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
      
     
 </body>

@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
+
   const modal = document.getElementById('magic-modal');
   const container = document.getElementById("regionalPriceContainer");
 
@@ -13,6 +14,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const vehicleSelect = document.getElementById("type_id");
   const driverSelect = document.getElementById("driver_select");
 
+  const validationModal = document.getElementById("validation-modal");
+  const validationIcon = document.getElementById("validation-icon");
+  const validationTitle = document.getElementById("validation-title");
+  const validationMessage = document.getElementById("validation-message");
+  const validationCancel = document.getElementById("validation-cancel");
+  const validationConfirm = document.getElementById("validation-confirm");
+
+
+  let validationResolve = null;
+
   // Cache of driver rows keyed by driver_id, populated from /getDriverInfo
   let driverCache = {};
   // Currently selected driver (for update/delete)
@@ -21,6 +32,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   //fetch sections
   await loadTerminals();
   await loadVehicles();
+
+  function showValidationModal({
+    type = "warning",
+    title = "Warning",
+    message = "",
+    confirmText = "OK",
+    cancelText = "Cancel",
+    showCancel = true
+  }) {
 
   function loadDriverOptions() {
     if (!driverSelect) return;
@@ -137,40 +157,292 @@ document.addEventListener('DOMContentLoaded', async () => {
     showModal();
   });
 
-  closeBtn.addEventListener("click", () => {
-    hideModal();
-    clearDriverModalInputs();
+    validationModal.className =
+      `validation-modal ${type}`;
+
+    validationModal.classList.remove("hidden");
+
+    validationTitle.textContent = title;
+
+    validationMessage.textContent = message;
+
+    validationConfirm.textContent = confirmText;
+
+    validationCancel.textContent = cancelText;
+
+    validationCancel.style.display =
+      showCancel ? "inline-block" : "none";
+
+
+    // Change icon
+    if (type === "delete") {
+      validationIcon.textContent = "🗑️";
+    }
+
+    else if (type === "success") {
+      validationIcon.textContent = "✓";
+    }
+
+    else if (type === "error") {
+      validationIcon.textContent = "✕";
+    }
+
+    else {
+      validationIcon.textContent = "⚠️";
+    }
+
+
+    return new Promise((resolve) => {
+
+      validationResolve = resolve;
+
+    });
+
+  }
+
+
+  function closeValidationModal(result) {
+
+    validationModal.classList.add("hidden");
+
+    if (validationResolve) {
+
+      validationResolve(result);
+
+      validationResolve = null;
+
+    }
+
+  }
+
+
+  // Confirm button
+  validationConfirm.addEventListener("click", () => {
+
+    closeValidationModal(true);
+
+  });
+
+
+  // Cancel button
+  validationCancel.addEventListener("click", () => {
+
+    closeValidationModal(false);
+
+  });
+
+
+  // Clicking dark background = cancel
+  validationModal
+    .querySelector(".validation-modal-overlay")
+    .addEventListener("click", () => {
+
+      closeValidationModal(false);
+
+    });
+
+
+  // ESC key
+  document.addEventListener("keydown", (event) => {
+
+    if (
+      event.key === "Escape" &&
+      !validationModal.classList.contains("hidden")
+    ) {
+
+      closeValidationModal(false);
+
+    }
+
   });
 
   dltBtn.addEventListener("click", async () => {
-    if (!selectedDriverId) return;
 
-    const driver = driverCache[selectedDriverId];
-    const fullName = driver
-      ? [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(" ")
-      : `driver #${selectedDriverId}`;
+  // =====================================================
+  // NO DRIVER SELECTED
+  // =====================================================
 
-    const confirmed = confirm(
-      `Permanently delete ${fullName || "this driver"}? This cannot be undone.`
+  if (!selectedDriverId) {
+
+    await showValidationModal({
+      type: "warning",
+      title: "No Driver Selected",
+      message: "Please select a driver first.",
+      confirmText: "OK",
+      showCancel: false
+    });
+
+    return;
+  }
+
+
+  // =====================================================
+  // GET DRIVER INFORMATION
+  // =====================================================
+
+  const driver =
+    driverCache[selectedDriverId];
+
+
+  const fullName = driver
+    ? [
+        driver.first_name,
+        driver.middle_name,
+        driver.last_name
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : `Driver #${selectedDriverId}`;
+
+
+  // =====================================================
+  // DELETE CONFIRMATION
+  // =====================================================
+
+  const confirmed = await showValidationModal({
+
+    type: "delete",
+
+    title: "Delete Driver?",
+
+    message:
+      `Permanently delete ${fullName || "this driver"}? ` +
+      `This will delete the driver's information and authentication account. ` +
+      `This action cannot be undone.`,
+
+    confirmText: "Delete",
+
+    cancelText: "Cancel",
+
+    showCancel: true
+
+  });
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+  // =====================================================
+  // DELETE REQUEST
+  // =====================================================
+
+  try {
+
+    const res = await fetch(
+      "/DeleteDriverInfo",
+      {
+        method: "DELETE",
+
+        credentials: "include",
+
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+
+        body: JSON.stringify({
+          driver_id: Number(selectedDriverId)
+        })
+      }
     );
-    if (!confirmed) return;
 
-    try {
-      const res = await fetch("/DeleteDriverInfo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driver_id: selectedDriverId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to delete driver");
 
-      clearRowSelection();
-      alert("Driver deleted successfully!");
-      location.reload();
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
+    // Check content type BEFORE parsing JSON
+    const contentType =
+      res.headers.get("content-type") || "";
+
+
+    if (!contentType.includes("application/json")) {
+
+      const text = await res.text();
+
+      console.error(
+        "Server returned non-JSON:",
+        text
+      );
+
+      throw new Error(
+        `Server returned an unexpected response (${res.status}).`
+      );
     }
+
+
+    const data = await res.json();
+
+
+    if (!res.ok || !data.success) {
+
+      throw new Error(
+        data.message ||
+        "Failed to delete driver."
+      );
+
+    }
+
+
+    // =====================================================
+    // SUCCESS
+    // =====================================================
+
+    await showValidationModal({
+
+      type: "success",
+
+      title: "Driver Deleted",
+
+      message:
+        `${fullName || "The driver"} has been permanently deleted.`,
+
+      confirmText: "OK",
+
+      showCancel: false
+
+    });
+
+
+    clearRowSelection();
+
+    location.reload();
+
+
+  } catch (err) {
+
+    console.error(
+      "Delete driver error:",
+      err
+    );
+
+
+    // =====================================================
+    // ERROR
+    // =====================================================
+
+    await showValidationModal({
+
+      type: "error",
+
+      title: "Delete Failed",
+
+      message:
+        err.message ||
+        "Failed to delete the driver.",
+
+      confirmText: "OK",
+
+      showCancel: false
+
+    });
+
+  }
+
+});
+
+
+  closeBtn.addEventListener("click", () => {
+    hideModal();
+    clearDriverModalInputs();
   });
 
   saveBtn.addEventListener("click", async () => {
@@ -246,21 +518,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         row.classList.add("data-row");
         row.dataset.driverId = driver.driver_id;
 
-        row.addEventListener("click", () => {
-          const alreadySelected = row.classList.contains("selected");
+       row.addEventListener("click", () => {
+
+          const alreadySelected =
+            row.classList.contains("selected");
+
           clearRowSelection();
 
           if (alreadySelected) {
-            if (updateMode) clearDriverModalInputs();
+            if (updateMode) {
+              clearDriverModalInputs();
+            }
             return;
           }
 
           row.classList.add("selected");
+
           selectedDriverId = driver.driver_id;
 
-          // If the update modal is already open, reflect the click immediately
           if (updateMode) {
-            if (driverSelect) driverSelect.value = driver.driver_id;
+            if (driverSelect) {
+              driverSelect.value = driver.driver_id;
+            }
+
             populateModalFromDriver(driver);
           }
         });
