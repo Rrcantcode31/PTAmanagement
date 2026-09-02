@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const validationCancel = document.getElementById("validation-cancel");
   const validationConfirm = document.getElementById("validation-confirm");
 
-
   let validationResolve = null;
 
   // Cache of driver rows keyed by driver_id, populated from /getDriverInfo
@@ -33,6 +32,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadTerminals();
   await loadVehicles();
 
+  // ==========================================================
+  // VALIDATION MODAL (moved to be self-contained, correctly closed)
+  // ==========================================================
+
   function showValidationModal({
     type = "warning",
     title = "Warning",
@@ -41,6 +44,64 @@ document.addEventListener('DOMContentLoaded', async () => {
     cancelText = "Cancel",
     showCancel = true
   }) {
+
+    validationModal.className = `validation-modal ${type}`;
+    validationModal.classList.remove("hidden");
+
+    validationTitle.textContent = title;
+    validationMessage.textContent = message;
+    validationConfirm.textContent = confirmText;
+    validationCancel.textContent = cancelText;
+    validationCancel.style.display = showCancel ? "inline-block" : "none";
+
+    // Change icon
+    if (type === "delete") {
+      validationIcon.textContent = "🗑️";
+    } else if (type === "success") {
+      validationIcon.textContent = "✓";
+    } else if (type === "error") {
+      validationIcon.textContent = "✕";
+    } else {
+      validationIcon.textContent = "⚠️";
+    }
+
+    return new Promise((resolve) => {
+      validationResolve = resolve;
+    });
+
+  }
+
+  function closeValidationModal(result) {
+    validationModal.classList.add("hidden");
+    if (validationResolve) {
+      validationResolve(result);
+      validationResolve = null;
+    }
+  }
+
+  validationConfirm.addEventListener("click", () => {
+    closeValidationModal(true);
+  });
+
+  validationCancel.addEventListener("click", () => {
+    closeValidationModal(false);
+  });
+
+  validationModal
+    .querySelector(".validation-modal-overlay")
+    .addEventListener("click", () => {
+      closeValidationModal(false);
+    });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !validationModal.classList.contains("hidden")) {
+      closeValidationModal(false);
+    }
+  });
+
+  // ==========================================================
+  // DRIVER FORM HELPERS (now correctly top-level)
+  // ==========================================================
 
   function loadDriverOptions() {
     if (!driverSelect) return;
@@ -74,7 +135,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById("last_name").value = "";
     document.getElementById("contact_number").value = "";
     document.getElementById("plate_number").value = "";
-
     document.getElementById("type_id").value = "";
     document.getElementById("terminal_id").value = "";
   }
@@ -87,7 +147,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById("last_name").value = driver.last_name || "";
     document.getElementById("contact_number").value = driver.contact_number || "";
     document.getElementById("plate_number").value = driver.plate_number || "";
-
     document.getElementById("type_id").value = driver.type_id ?? driver.vehicle_id ?? "";
     document.getElementById("terminal_id").value = driver.terminal_id ?? "";
   }
@@ -103,7 +162,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const resetModes = () => {
     addMode = updateMode = deleteMode = false;
-
     addBtn.classList.remove("active");
     uptBtn.classList.remove("active");
     dltBtn.classList.remove("active");
@@ -124,7 +182,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       clearDriverModalInputs();
       return;
     }
-
     resetModes();
     addMode = true;
     addBtn.classList.add("active");
@@ -139,7 +196,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       clearDriverModalInputs();
       return;
     }
-
     resetModes();
     updateMode = true;
     uptBtn.classList.add("active");
@@ -147,7 +203,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadDriverOptions();
 
     if (selectedDriverId && driverCache[selectedDriverId]) {
-      // A row was already selected from the list — reflect it in the dropdown
       if (driverSelect) driverSelect.value = selectedDriverId;
       populateModalFromDriver(driverCache[selectedDriverId]);
     } else {
@@ -157,293 +212,101 @@ document.addEventListener('DOMContentLoaded', async () => {
     showModal();
   });
 
-    validationModal.className =
-      `validation-modal ${type}`;
-
-    validationModal.classList.remove("hidden");
-
-    validationTitle.textContent = title;
-
-    validationMessage.textContent = message;
-
-    validationConfirm.textContent = confirmText;
-
-    validationCancel.textContent = cancelText;
-
-    validationCancel.style.display =
-      showCancel ? "inline-block" : "none";
-
-
-    // Change icon
-    if (type === "delete") {
-      validationIcon.textContent = "🗑️";
-    }
-
-    else if (type === "success") {
-      validationIcon.textContent = "✓";
-    }
-
-    else if (type === "error") {
-      validationIcon.textContent = "✕";
-    }
-
-    else {
-      validationIcon.textContent = "⚠️";
-    }
-
-
-    return new Promise((resolve) => {
-
-      validationResolve = resolve;
-
-    });
-
-  }
-
-
-  function closeValidationModal(result) {
-
-    validationModal.classList.add("hidden");
-
-    if (validationResolve) {
-
-      validationResolve(result);
-
-      validationResolve = null;
-
-    }
-
-  }
-
-
-  // Confirm button
-  validationConfirm.addEventListener("click", () => {
-
-    closeValidationModal(true);
-
-  });
-
-
-  // Cancel button
-  validationCancel.addEventListener("click", () => {
-
-    closeValidationModal(false);
-
-  });
-
-
-  // Clicking dark background = cancel
-  validationModal
-    .querySelector(".validation-modal-overlay")
-    .addEventListener("click", () => {
-
-      closeValidationModal(false);
-
-    });
-
-
-  // ESC key
-  document.addEventListener("keydown", (event) => {
-
-    if (
-      event.key === "Escape" &&
-      !validationModal.classList.contains("hidden")
-    ) {
-
-      closeValidationModal(false);
-
-    }
-
-  });
-
-  dltBtn.addEventListener("click", async () => {
-
-  // =====================================================
-  // NO DRIVER SELECTED
-  // =====================================================
-
-  if (!selectedDriverId) {
-
-    await showValidationModal({
-      type: "warning",
-      title: "No Driver Selected",
-      message: "Please select a driver first.",
-      confirmText: "OK",
-      showCancel: false
-    });
-
-    return;
-  }
-
-
-  // =====================================================
-  // GET DRIVER INFORMATION
-  // =====================================================
-
-  const driver =
-    driverCache[selectedDriverId];
-
-
-  const fullName = driver
-    ? [
-        driver.first_name,
-        driver.middle_name,
-        driver.last_name
-      ]
-        .filter(Boolean)
-        .join(" ")
-    : `Driver #${selectedDriverId}`;
-
-
-  // =====================================================
-  // DELETE CONFIRMATION
-  // =====================================================
-
-  const confirmed = await showValidationModal({
-
-    type: "delete",
-
-    title: "Delete Driver?",
-
-    message:
-      `Permanently delete ${fullName || "this driver"}? ` +
-      `This will delete the driver's information and authentication account. ` +
-      `This action cannot be undone.`,
-
-    confirmText: "Delete",
-
-    cancelText: "Cancel",
-
-    showCancel: true
-
-  });
-
-
-  if (!confirmed) {
-    return;
-  }
-
-
-  // =====================================================
-  // DELETE REQUEST
-  // =====================================================
-
-  try {
-
-    const res = await fetch(
-      "/DeleteDriverInfo",
-      {
-        method: "DELETE",
-
-        credentials: "include",
-
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-
-        body: JSON.stringify({
-          driver_id: Number(selectedDriverId)
-        })
-      }
-    );
-
-
-    // Check content type BEFORE parsing JSON
-    const contentType =
-      res.headers.get("content-type") || "";
-
-
-    if (!contentType.includes("application/json")) {
-
-      const text = await res.text();
-
-      console.error(
-        "Server returned non-JSON:",
-        text
-      );
-
-      throw new Error(
-        `Server returned an unexpected response (${res.status}).`
-      );
-    }
-
-
-    const data = await res.json();
-
-
-    if (!res.ok || !data.success) {
-
-      throw new Error(
-        data.message ||
-        "Failed to delete driver."
-      );
-
-    }
-
-
-    // =====================================================
-    // SUCCESS
-    // =====================================================
-
-    await showValidationModal({
-
-      type: "success",
-
-      title: "Driver Deleted",
-
-      message:
-        `${fullName || "The driver"} has been permanently deleted.`,
-
-      confirmText: "OK",
-
-      showCancel: false
-
-    });
-
-
-    clearRowSelection();
-
-    location.reload();
-
-
-  } catch (err) {
-
-    console.error(
-      "Delete driver error:",
-      err
-    );
-
-
-    // =====================================================
-    // ERROR
-    // =====================================================
-
-    await showValidationModal({
-
-      type: "error",
-
-      title: "Delete Failed",
-
-      message:
-        err.message ||
-        "Failed to delete the driver.",
-
-      confirmText: "OK",
-
-      showCancel: false
-
-    });
-
-  }
-
-});
-
-
   closeBtn.addEventListener("click", () => {
     hideModal();
     clearDriverModalInputs();
   });
+
+  // ==========================================================
+  // DELETE
+  // ==========================================================
+
+  dltBtn.addEventListener("click", async () => {
+
+    if (!selectedDriverId) {
+      await showValidationModal({
+        type: "warning",
+        title: "No Driver Selected",
+        message: "Please select a driver first.",
+        confirmText: "OK",
+        showCancel: false
+      });
+      return;
+    }
+
+    const driver = driverCache[selectedDriverId];
+
+    const fullName = driver
+      ? [driver.first_name, driver.middle_name, driver.last_name]
+          .filter(Boolean).join(" ")
+      : `Driver #${selectedDriverId}`;
+
+    const confirmed = await showValidationModal({
+      type: "delete",
+      title: "Delete Driver?",
+      message:
+        `Permanently delete ${fullName || "this driver"}? ` +
+        `This will delete the driver's information and authentication account. ` +
+        `This action cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      showCancel: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/DeleteDriverInfo", {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ driver_id: Number(selectedDriverId) })
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Server returned non-JSON:", text);
+        throw new Error(`Server returned an unexpected response (${res.status}).`);
+      }
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete driver.");
+      }
+
+      await showValidationModal({
+        type: "success",
+        title: "Driver Deleted",
+        message: `${fullName || "The driver"} has been permanently deleted.`,
+        confirmText: "OK",
+        showCancel: false
+      });
+
+      clearRowSelection();
+      location.reload();
+
+    } catch (err) {
+      console.error("Delete driver error:", err);
+      await showValidationModal({
+        type: "error",
+        title: "Delete Failed",
+        message: err.message || "Failed to delete the driver.",
+        confirmText: "OK",
+        showCancel: false
+      });
+    }
+
+  });
+
+  // ==========================================================
+  // SAVE (ADD / UPDATE)
+  // ==========================================================
 
   saveBtn.addEventListener("click", async () => {
     try {
@@ -455,7 +318,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         last_name: document.getElementById("last_name").value.trim(),
         contact_number: document.getElementById("contact_number").value.trim(),
         plate_number: document.getElementById("plate_number").value.trim(),
-
         type_id: document.getElementById("type_id").value,
         terminal_id: document.getElementById("terminal_id").value,
       };
@@ -492,7 +354,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  //show driver on the list
+  // ==========================================================
+  // LOAD DRIVER LIST
+  // ==========================================================
+
   try {
     const res = await fetch("/getDriverInfo");
     const data = await res.json();
@@ -503,7 +368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const vehicleType = item.type_name || "Uncategorized";
       if (!grouped[vehicleType]) grouped[vehicleType] = [];
       grouped[vehicleType].push(item);
-      driverCache[item.driver_id] = item; // cache for update-mode prefill
+      driverCache[item.driver_id] = item;
     });
     container.innerHTML = "";
 
@@ -518,29 +383,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         row.classList.add("data-row");
         row.dataset.driverId = driver.driver_id;
 
-       row.addEventListener("click", () => {
-
-          const alreadySelected =
-            row.classList.contains("selected");
-
+        row.addEventListener("click", () => {
+          const alreadySelected = row.classList.contains("selected");
           clearRowSelection();
 
           if (alreadySelected) {
-            if (updateMode) {
-              clearDriverModalInputs();
-            }
+            if (updateMode) clearDriverModalInputs();
             return;
           }
 
           row.classList.add("selected");
-
           selectedDriverId = driver.driver_id;
 
           if (updateMode) {
-            if (driverSelect) {
-              driverSelect.value = driver.driver_id;
-            }
-
+            if (driverSelect) driverSelect.value = driver.driver_id;
             populateModalFromDriver(driver);
           }
         });
@@ -549,16 +405,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         vehicleTypecell.classList.add("data-cell", "col-vehicle");
         vehicleTypecell.textContent = "~";
 
-        // Full Name
         const nameCell = document.createElement("div");
         nameCell.classList.add("data-cell", "col-driver-name");
-
-        const fullName = [
-          driver.first_name,
-          driver.middle_name,
-          driver.last_name
-        ].filter(Boolean).join(" ");
-
+        const fullName = [driver.first_name, driver.middle_name, driver.last_name]
+          .filter(Boolean).join(" ");
         nameCell.textContent = fullName || "No Name";
 
         const contactCell = document.createElement("div");
@@ -592,18 +442,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await fetch('/terminals');
       const data = await res.json();
-
       const terminals = data.terminals || [];
-
       terminalSelect.innerHTML = '<option value="">Select Terminal</option>';
-
       terminals.forEach(term => {
         const option = document.createElement("option");
         option.value = term.terminal_id;
         option.textContent = `${term.terminal_name} - ${term.terminal_address}`;
         terminalSelect.appendChild(option);
       });
-
     } catch (err) {
       console.error("Failed to load terminals:", err);
     }
@@ -614,18 +460,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await fetch('/getVehicles');
       const data = await res.json();
-
       const vehicles = data.vehicles || [];
-
       vehicleSelect.innerHTML = '<option value="">Select Vehicle</option>';
-
       vehicles.forEach(v => {
         const option = document.createElement("option");
         option.value = v.type_id;
         option.textContent = `${v.type_name}`;
         vehicleSelect.appendChild(option);
       });
-
     } catch (err) {
       console.error("Failed to load vehicles:", err)
     }
