@@ -316,3 +316,118 @@
 .modal-note { font-size: 11px; color: #666; margin-top: 6px; }
 .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
 #modal-save { flex: 1; }
+
+/* VALIDATION MODAL */
+.validation-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.validation-modal.hidden {
+  display: none;
+}
+
+.validation-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.validation-modal-box {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 26px;
+  width: 320px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  animation: validationPop 0.18s ease-out;
+}
+
+@keyframes validationPop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.validation-icon {
+  font-size: 34px;
+  margin-bottom: 10px;
+}
+
+.validation-modal-box h3 {
+  color: #319086;
+  font-size: 18px;
+  margin-bottom: 10px;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.validation-modal-box p {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.validation-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.validation-actions button {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#validation-cancel {
+  background: #eef5f4;
+  color: #5f7c77;
+}
+
+#validation-cancel:hover {
+  background: #e0eceb;
+}
+
+#validation-confirm {
+  background: #319086;
+  color: #fff;
+}
+
+#validation-confirm:hover {
+  background: #26756d;
+}
+
+/* Delete variant — red confirm button */
+.validation-modal.delete #validation-confirm {
+  background: #ea0000;
+}
+
+.validation-modal.delete #validation-confirm:hover {
+  background: #c40000;
+}
+
+/* Success variant */
+.validation-modal.success #validation-confirm {
+  background: #319086;
+}
+
+/* Error variant */
+.validation-modal.error #validation-confirm {
+  background: #ea0000;
+}
+
+.validation-modal.error #validation-confirm:hover {
+  background: #c40000;
+}

@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const updateBtn = document.querySelector('.update-btn');
   const deleteBtn = document.querySelector('.delete-btn');
 
+  // Validation / confirmation modal elements
+  const validationModal = document.getElementById("validation-modal");
+  const validationIcon = document.getElementById("validation-icon");
+  const validationTitle = document.getElementById("validation-title");
+  const validationMessage = document.getElementById("validation-message");
+  const validationCancel = document.getElementById("validation-cancel");
+  const validationConfirm = document.getElementById("validation-confirm");
+
   if (
     !mapEl ||
     typeof window.L === 'undefined' ||
@@ -24,20 +32,96 @@ document.addEventListener('DOMContentLoaded', async () => {
     !modalCloseBtn ||
     !addBtn ||
     !updateBtn ||
-    !deleteBtn
+    !deleteBtn ||
+    !validationModal ||
+    !validationIcon ||
+    !validationTitle ||
+    !validationMessage ||
+    !validationCancel ||
+    !validationConfirm
   ) {
     console.error('Missing required DOM elements or Leaflet not loaded.');
     return;
   }
 
-  // Leaflet map
-  //const southCotabatoBounds = L.latLngBounds([[5.47, 123.88], [7.69, 125.56]]);
+  // ==========================================================
+  // VALIDATION / CONFIRMATION MODAL (replaces confirm()/alert())
+  // ==========================================================
+
+  let validationResolve = null;
+
+  function showValidationModal({
+    type = "warning",
+    title = "Warning",
+    message = "",
+    confirmText = "OK",
+    cancelText = "Cancel",
+    showCancel = true
+  }) {
+
+    validationModal.className = `validation-modal ${type}`;
+    validationModal.classList.remove("hidden");
+
+    validationTitle.textContent = title;
+    validationMessage.textContent = message;
+    validationConfirm.textContent = confirmText;
+    validationCancel.textContent = cancelText;
+    validationCancel.style.display = showCancel ? "inline-block" : "none";
+
+    if (type === "delete") {
+      validationIcon.textContent = "🗑️";
+    } else if (type === "success") {
+      validationIcon.textContent = "✓";
+    } else if (type === "error") {
+      validationIcon.textContent = "✕";
+    } else {
+      validationIcon.textContent = "⚠️";
+    }
+
+    return new Promise((resolve) => {
+      validationResolve = resolve;
+    });
+  }
+
+  function closeValidationModal(result) {
+    validationModal.classList.add("hidden");
+    if (validationResolve) {
+      validationResolve(result);
+      validationResolve = null;
+    }
+  }
+
+  validationConfirm.addEventListener("click", () => {
+    closeValidationModal(true);
+  });
+
+  validationCancel.addEventListener("click", () => {
+    closeValidationModal(false);
+  });
+
+  validationModal
+    .querySelector(".validation-modal-overlay")
+    .addEventListener("click", () => {
+      closeValidationModal(false);
+    });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !validationModal.classList.contains("hidden")) {
+      closeValidationModal(false);
+    }
+  });
+
+  // ==========================================================
+  // MAP SETUP
+  // ==========================================================
+
   const southCotabatoBounds = L.latLngBounds([[5.95, 124.55], [6.65, 125.2]]);
   const map = L.map('map', {
     maxBounds: southCotabatoBounds,
     maxBoundsViscosity: 1.0,
     minZoom: 10.3,
-    maxZoom: 21  });
+    maxZoom: 21
+  });
   map.fitBounds(southCotabatoBounds, { padding: [10, 10] });
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -64,7 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     </svg>`
   });
 
-  // Name of the terminal that should keep the full pin marker.np
+  // Name of the terminal that should keep the full pin marker.
   // Change this constant if you want a different terminal highlighted.
   const HIGHLIGHTED_TERMINAL = 'Koronadal City';
 
@@ -90,7 +174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  // Modes
+  // ==========================================================
+  // MODES
+  // ==========================================================
+
   let addMode = false;
   let updateMode = false;
   let deleteMode = false;
@@ -179,7 +266,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     deleteBtn.classList.add('active');
   });
 
-  // Fetch terminals + render markers
+  // ==========================================================
+  // DELETE HELPER — shared by both marker click handlers below
+  // ==========================================================
+
+  async function handleDeleteMarker(marker) {
+    const confirmed = await showValidationModal({
+      type: "delete",
+      title: "Delete Terminal?",
+      message: `Permanently delete "${marker.terminal_name || 'this terminal'}"? This cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      showCancel: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const delRes = await fetch('/DeleteTerminalLocation', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminal_id: marker.terminal_id })
+      });
+      const delResult = await delRes.json();
+
+      if (delResult.error) {
+        await showValidationModal({
+          type: "error",
+          title: "Delete Failed",
+          message: delResult.error,
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
+
+      map.removeLayer(marker);
+
+      await showValidationModal({
+        type: "success",
+        title: "Terminal Deleted",
+        message: "The terminal was removed successfully.",
+        confirmText: "OK",
+        showCancel: false
+      });
+
+    } catch (err) {
+      console.error(err);
+      await showValidationModal({
+        type: "error",
+        title: "Delete Failed",
+        message: "Something went wrong while deleting this terminal.",
+        confirmText: "OK",
+        showCancel: false
+      });
+    }
+  }
+
+  // ==========================================================
+  // FETCH TERMINALS + RENDER MARKERS
+  // ==========================================================
+
   const markers = [];
 
   try {
@@ -199,7 +346,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   } catch (err) {
     console.error(err);
-    alert('Failed to load terminals');
+    await showValidationModal({
+      type: "error",
+      title: "Load Failed",
+      message: "Failed to load terminals.",
+      confirmText: "OK",
+      showCancel: false
+    });
   }
 
   // Map click for Add: open modal (do NOT use prompt; let user type)
@@ -221,15 +374,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Save modal (handles both Add and Update)
+  // ==========================================================
+  // SAVE MODAL (handles both Add and Update)
+  // ==========================================================
+
   modalSaveBtn.addEventListener('click', async () => {
     const terminal_name = modalName.value.trim();
     const terminal_address = modalAddress.value.trim();
 
     if (addMode) {
       if (!pending.addLat || !pending.addLng) return;
-      if (!terminal_name) return alert('Terminal Name is required.');
-      if (!terminal_address) return alert('Terminal Address is required.');
+
+      if (!terminal_name) {
+        await showValidationModal({
+          type: "warning",
+          title: "Missing Name",
+          message: "Terminal Name is required.",
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
+
+      if (!terminal_address) {
+        await showValidationModal({
+          type: "warning",
+          title: "Missing Address",
+          message: "Terminal Address is required.",
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
 
       try {
         const response = await fetch('/AddTerminalLocation', {
@@ -244,7 +420,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         const result = await response.json();
-        if (result.error) return alert(result.error);
+
+        if (result.error) {
+          await showValidationModal({
+            type: "error",
+            title: "Add Failed",
+            message: result.error,
+            confirmText: "OK",
+            showCancel: false
+          });
+          return;
+        }
 
         const marker = L.marker([pending.addLat, pending.addLng], { icon: getIconFor(terminal_name) }).addTo(map);
         marker.terminal_id = result.terminal_id;
@@ -269,22 +455,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
 
           if (deleteMode) {
-            if (!confirm('Delete this terminal?')) return;
-            try {
-              const delRes = await fetch('/DeleteTerminalLocation', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ terminal_id: marker.terminal_id })
-              });
-              const delResult = await delRes.json();
-              if (delResult.error) return alert(delResult.error);
-
-              map.removeLayer(marker);
-              alert('Terminal deleted!');
-            } catch (err) {
-              console.error(err);
-              alert('Failed to delete terminal');
-            }
+            await handleDeleteMarker(marker);
           }
         });
 
@@ -293,10 +464,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         hideModal();
         clearPending();
         resetModes();
-        alert('Terminal added!');
+
+        await showValidationModal({
+          type: "success",
+          title: "Terminal Added",
+          message: "The terminal was added successfully.",
+          confirmText: "OK",
+          showCancel: false
+        });
+
       } catch (err) {
         console.error(err);
-        alert('Failed to add terminal');
+        await showValidationModal({
+          type: "error",
+          title: "Add Failed",
+          message: "Failed to add terminal.",
+          confirmText: "OK",
+          showCancel: false
+        });
       }
       return;
     }
@@ -305,8 +490,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       const marker = pending.updateMarker;
       if (!marker) return;
 
-      if (!terminal_name) return alert('Terminal Name is required.');
-      if (!terminal_address) return alert('Terminal Address is required.');
+      if (!terminal_name) {
+        await showValidationModal({
+          type: "warning",
+          title: "Missing Name",
+          message: "Terminal Name is required.",
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
+
+      if (!terminal_address) {
+        await showValidationModal({
+          type: "warning",
+          title: "Missing Address",
+          message: "Terminal Address is required.",
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
 
       try {
         const ll = marker.getLatLng();
@@ -326,7 +530,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!response.ok) throw new Error("Server error");
 
         const result = await response.json();
-        if (result.error) return alert(result.error);
+
+        if (result.error) {
+          await showValidationModal({
+            type: "error",
+            title: "Update Failed",
+            message: result.error,
+            confirmText: "OK",
+            showCancel: false
+          });
+          return;
+        }
 
         marker.terminal_name = terminal_name;
         marker.terminal_address = terminal_address;
@@ -343,11 +557,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         hideModal();
         clearPending();
         resetModes();
-        alert('Terminal updated!');
+
+        await showValidationModal({
+          type: "success",
+          title: "Terminal Updated",
+          message: "The terminal was updated successfully.",
+          confirmText: "OK",
+          showCancel: false
+        });
 
       } catch (err) {
         console.error(err);
-        alert('Failed to update terminal');
+        await showValidationModal({
+          type: "error",
+          title: "Update Failed",
+          message: "Failed to update terminal.",
+          confirmText: "OK",
+          showCancel: false
+        });
       }
 
       return;
@@ -358,7 +585,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearPending();
   });
 
-  // Marker interactions
+  // ==========================================================
+  // MARKER INTERACTIONS (existing markers loaded on page load)
+  // ==========================================================
+
   markers.forEach(marker => {
     marker.on('click', async () => {
       if (updateMode) {
@@ -377,23 +607,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (deleteMode) {
-        if (!confirm('Delete this terminal?')) return;
-
-        try {
-          const response = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
-            method: 'DELETE'
-          });
-
-          const result = await response.json();
-          if (result.error) return alert(result.error);
-
-          map.removeLayer(marker);
-          alert('Terminal deleted!');
-        } catch (err) {
-          console.error(err);
-          alert('Failed to delete terminal');
-        }
+        await handleDeleteMarker(marker);
       }
     });
   });
-});   
+});
