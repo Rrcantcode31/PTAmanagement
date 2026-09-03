@@ -285,7 +285,7 @@
     }
 
     .floating-actions button.active{
-        background:  #f806061f;
+        background:  #f80606e2;
     }
 
     .floating-actions button:hover {
@@ -416,7 +416,7 @@
     .validation-modal-panel {
     position: relative;
     width: min(430px, calc(100% - 40px));
-    background: #ffffff;
+    background: linear-gradient(135deg,#9ce0e0,#c9dbdb52);
     border-radius: 18px;
     padding: 30px 30px 25px;
     text-align: center;
@@ -440,9 +440,9 @@
     /* Title */
     .validation-modal-panel h3 {
     margin: 0 0 10px;
-    font-size: 21px;
+    font-size: 24px;
     font-weight: 700;
-    color: #123f3b;
+    color: #0d2c29;
     }
 
     /* Message */
@@ -450,8 +450,9 @@
     margin: 0 auto 25px;
     max-width: 350px;
     font-size: 15px;
+    font-family: 'Montserrat', sans-serif;
     line-height: 1.6;
-    color: #555;
+    color: #3a3333;
     }
 
     /* Buttons */
@@ -485,14 +486,14 @@
     /* Cancel */
     .validation-cancel-btn {
     background: #e9eefc;
-
+    font-family: 'Montserrat', sans-serif;
     color: #24446f;
     }
 
     /* Confirm */
     .validation-confirm-btn {
     background: #315d91;
-
+    font-family: 'Montserrat', sans-serif;
     color: white;
     }
 

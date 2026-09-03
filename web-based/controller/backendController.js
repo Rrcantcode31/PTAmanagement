@@ -683,6 +683,67 @@ exports.getDriverInfo = async (req, res) => {
   }
 };
 
+// Admin Permanently delete a driver (and their vehicle, if unshared)
+exports.DeleteDriverInfo = async (req, res) => {
+  try {
+    const { driver_id } = req.body;
+
+    if (!driver_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "driver_id is required" });
+    }
+
+    const connection = await dbPool.promise().getConnection();
+    await connection.beginTransaction();
+
+    try {
+      const [infoRows] = await connection.query(
+        `SELECT vehicle_id FROM driver_info WHERE driver_id = ?`,
+        [driver_id]
+      );
+
+      if (infoRows.length === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ success: false, message: "Driver not found" });
+      }
+
+      const vehicleId = infoRows[0].vehicle_id;
+
+      // Remove driver_info first (references driverauth + vehicles)
+      await connection.query(`DELETE FROM driver_info WHERE driver_id = ?`, [driver_id]);
+      await connection.query(`DELETE FROM driverauth WHERE driver_id = ?`, [driver_id]);
+
+      // Only delete the vehicle if no other driver is still using it
+      if (vehicleId) {
+        const [stillUsed] = await connection.query(
+          `SELECT driver_id FROM driver_info WHERE vehicle_id = ?`,
+          [vehicleId]
+        );
+        if (stillUsed.length === 0) {
+          await connection.query(`DELETE FROM vehicles WHERE vehicle_id = ?`, [vehicleId]);
+        }
+      }
+
+      await connection.commit();
+      return res.status(200).json({ success: true, message: "Driver deleted successfully" });
+    } catch (err) {
+      await connection.rollback();
+      throw err;
+    } finally {
+      connection.release();
+    }
+  } catch (err) {
+    console.error("DeleteDriverInfo error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: err.message,
+    });
+  }
+};
+
 // Admin Insert Fare Prices
 exports.InsertFarePrice = async (req, res) => {
         try{
@@ -782,98 +843,228 @@ exports.InsertFarePrice = async (req, res) => {
   }
 };
 
-// Admin Permanently delete a driver (and their vehicle, if unshared)
-exports.DeleteDriverInfo = async (req, res) => {
+// Update commuter transparent fare price
+exports.updateFarePrice = async (req, res) => {
   try {
-    const { driver_id } = req.body;
 
-    if (!driver_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "driver_id is required" });
+    const {
+      bounds_id,
+      from_terminal_id,
+      to_terminal_id,
+      kilometer,
+      regular_t,
+      discounted_t,
+      regular_m,
+      discounted_m
+    } = req.body;
+
+    // Normalize empty values
+    const boundIdNormalization =
+      bounds_id === "" || bounds_id === undefined ? null : bounds_id;
+
+    const fromTerminalId =
+      from_terminal_id === "" || from_terminal_id === undefined
+        ? null
+        : from_terminal_id;
+
+    const toTerminalId =
+      to_terminal_id === "" || to_terminal_id === undefined
+        ? null
+        : to_terminal_id;
+
+    // Validate bounds ID
+    if (!boundIdNormalization) {
+      return res.status(400).json({
+        success: false,
+        message: "Fare price ID is required"
+      });
+    }
+
+    // Validate terminals
+    if (!fromTerminalId) {
+      return res.status(400).json({
+        success: false,
+        message: "From terminal is required"
+      });
+    }
+
+    if (!toTerminalId) {
+      return res.status(400).json({
+        success: false,
+        message: "To terminal is required"
+      });
+    }
+
+    // Validate fare information
+    if (
+      kilometer === "" ||
+      kilometer === undefined ||
+      regular_t === "" ||
+      regular_t === undefined ||
+      discounted_t === "" ||
+      discounted_t === undefined ||
+      regular_m === "" ||
+      regular_m === undefined ||
+      discounted_m === "" ||
+      discounted_m === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields"
+      });
     }
 
     const connection = await dbPool.promise().getConnection();
+
     await connection.beginTransaction();
 
     try {
-      const [infoRows] = await connection.query(
-        `SELECT vehicle_id FROM driver_info WHERE driver_id = ?`,
-        [driver_id]
+
+      const [boundResult] = await connection.query(
+        `SELECT bounds_id
+         FROM terminal_bounds
+         WHERE bounds_id = ?`,
+        [boundIdNormalization]
       );
 
-      if (infoRows.length === 0) {
+      if (boundResult.length === 0) {
         await connection.rollback();
         connection.release();
-        return res.status(404).json({ success: false, message: "Driver not found" });
+
+        return res.status(404).json({
+          success: false,
+          message: "Terminal bound not found"
+        });
       }
 
-      const vehicleId = infoRows[0].vehicle_id;
+      await connection.query(
+        `UPDATE terminal_bounds
+         SET
+           from_terminal_id = ?,
+           to_terminal_id = ?,
+           kilometer = ?
+         WHERE bounds_id = ?`,
+        [
+          fromTerminalId,
+          toTerminalId,
+          kilometer,
+          boundIdNormalization
+        ]
+      );
 
-      // Remove driver_info first (references driverauth + vehicles)
-      await connection.query(`DELETE FROM driver_info WHERE driver_id = ?`, [driver_id]);
-      await connection.query(`DELETE FROM driverauth WHERE driver_id = ?`, [driver_id]);
+      const [fareResult] = await connection.query(
+        `UPDATE fare_prices
+         SET
+           regular_t = ?,
+           discounted_t = ?,
+           regular_m = ?,
+           discounted_m = ?
+         WHERE bounds_id = ?`,
+        [
+          regular_t,
+          discounted_t,
+          regular_m,
+          discounted_m,
+          boundIdNormalization
+        ]
+      );
 
-      // Only delete the vehicle if no other driver is still using it
-      if (vehicleId) {
-        const [stillUsed] = await connection.query(
-          `SELECT driver_id FROM driver_info WHERE vehicle_id = ?`,
-          [vehicleId]
-        );
-        if (stillUsed.length === 0) {
-          await connection.query(`DELETE FROM vehicles WHERE vehicle_id = ?`, [vehicleId]);
-        }
+      if (fareResult.affectedRows === 0) {
+        await connection.rollback();
+        connection.release();
+
+        return res.status(404).json({
+          success: false,
+          message: "Fare price not found"
+        });
       }
 
       await connection.commit();
-      return res.status(200).json({ success: true, message: "Driver deleted successfully" });
+
+      return res.status(200).json({
+        success: true,
+        message: "Fare price updated successfully",
+        bounds_id: boundIdNormalization
+      });
+
     } catch (err) {
+
       await connection.rollback();
-      throw err;
+
+      console.error("Update fare transaction error:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: "Transaction failed"
+      });
+
     } finally {
+
       connection.release();
+
     }
+
   } catch (err) {
-    console.error("DeleteDriverInfo error:", err);
+
+    console.error("updateFarePrice error:", err);
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
-      error: err.message,
+      message: "Server error"
     });
+
   }
 };
 
-//get fare price data
+// Get fare price data
 exports.getFarePrices = async (req, res) => {
   try {
+
     const priceInfo = `
       SELECT 
+        t.bounds_id,
+        t.from_terminal_id,
+        t.to_terminal_id,
+
         t_from.terminal_name AS from_terminal,
         t_to.terminal_name AS to_terminal,
+
         t.kilometer,
+
         f.regular_t,
         f.discounted_t,
         f.regular_m,
         f.discounted_m
+
       FROM terminal_bounds t
 
-      LEFT JOIN terminal_locations t_from 
+      LEFT JOIN terminal_locations t_from
         ON t.from_terminal_id = t_from.terminal_id
 
-      LEFT JOIN terminal_locations t_to 
+      LEFT JOIN terminal_locations t_to
         ON t.to_terminal_id = t_to.terminal_id
 
-      LEFT JOIN fare_prices f 
-        ON t.bounds_id = f.bounds_id;
+      LEFT JOIN fare_prices f
+        ON t.bounds_id = f.bounds_id
+
+      ORDER BY
+        t_from.terminal_name ASC,
+        t_to.terminal_name ASC;
     `;
 
     const [rows] = await dbPool.promise().query(priceInfo);
 
-    res.json(rows);
+    res.status(200).json(rows);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch fare prices' });
+
+    console.error("getFarePrices error:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch fare prices",
+      error: err.message
+    });
   }
 };
 

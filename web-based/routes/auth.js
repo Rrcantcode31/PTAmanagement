@@ -15,6 +15,7 @@ router.post('/InsertDriverInfo', authController.isLoggedIn, authController.Inser
 router.post('/InsertFarePrice', authController.isLoggedIn, authController.InsertFarePrice);
 router.post('/postDispatchAreaZone', authController.isLoggedIn, authController.postDispatchZoneArea);
 router.put('/putDispatchAreaZone/:zone_id', authController.isLoggedIn, authController.putDispatchZoneArea);
+router.patch('/updateFarePrices', authController.isLoggedIn, authController.getFarePrices);
 
 //Admin get data
 router.get('/terminals', authController.isLoggedIn, authController.GetAllTerminalLocations);
