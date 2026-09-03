@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     validationModal.classList.remove("hidden");
 
     validationTitle.textContent = title;
-    validationMessage.textContent = message;
+    validationMessage.innerHTML = message;
     validationConfirm.textContent = confirmText;
     validationCancel.textContent = cancelText;
     validationCancel.style.display = showCancel ? "inline-block" : "none";
@@ -241,17 +241,23 @@ document.addEventListener('DOMContentLoaded', async () => {
           .filter(Boolean).join(" ")
       : `Driver #${selectedDriverId}`;
 
+    const plate_number = driver 
+      ? [driver.plate_number]
+              .filter(Boolean).join(" ")
+              : `Driver #${selectedDriverId}`;  
+
     const confirmed = await showValidationModal({
-      type: "delete",
-      title: "Delete Driver?",
-      message:
-        `Permanently delete ${fullName || "this driver"}? ` +
-        `This will delete the driver's information and authentication account. ` +
-        `This action cannot be undone.`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
-      showCancel: true
-    });
+  type: "delete",
+  title: "Delete Driver?",
+  message:
+    `Permanently delete <span class="highlight-value">${fullName || "this driver"}</span>? ` +
+    `with a vehicle <span class="highlight-value">${plate_number || "this vehicle"}</span>? ` +
+    `This will delete the driver's information and authentication account. ` +
+    `<strong>This action cannot be undone.</strong>`,
+  confirmText: "Delete",
+  cancelText: "Cancel",
+  showCancel: true
+});
 
     if (!confirmed) return;
 

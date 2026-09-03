@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     validationModal.classList.remove("hidden");
 
     validationTitle.textContent = title;
-    validationMessage.textContent = message;
+    validationMessage.innerHTML = message;
     validationConfirm.textContent = confirmText;
     validationCancel.textContent = cancelText;
     validationCancel.style.display = showCancel ? "inline-block" : "none";
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     maxBounds: southCotabatoBounds,
     maxBoundsViscosity: 1.0,
     minZoom: 10.3,
-    maxZoom: 21
+    maxZoom: 20.5
   });
   map.fitBounds(southCotabatoBounds, { padding: [10, 10] });
 
@@ -271,57 +271,57 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================================
 
   async function handleDeleteMarker(marker) {
-    const confirmed = await showValidationModal({
-      type: "delete",
-      title: "Delete Terminal?",
-      message: `Permanently delete "${marker.terminal_name || 'this terminal'}"? This cannot be undone.`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
-      showCancel: true
+  const confirmed = await showValidationModal({
+    type: "delete",
+    title: "Delete Terminal?",
+    message: `Permanently delete <span class="highlight-value">${marker.terminal_name || 'this terminal'}</span>?` +
+    ` This cannot be undone.`,
+    confirmText: "Delete",
+    cancelText: "Cancel",
+    showCancel: true
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const delRes = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
     });
+    const delResult = await delRes.json();
 
-    if (!confirmed) return;
-
-    try {
-      const delRes = await fetch('/DeleteTerminalLocation', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ terminal_id: marker.terminal_id })
-      });
-      const delResult = await delRes.json();
-
-      if (delResult.error) {
-        await showValidationModal({
-          type: "error",
-          title: "Delete Failed",
-          message: delResult.error,
-          confirmText: "OK",
-          showCancel: false
-        });
-        return;
-      }
-
-      map.removeLayer(marker);
-
-      await showValidationModal({
-        type: "success",
-        title: "Terminal Deleted",
-        message: "The terminal was removed successfully.",
-        confirmText: "OK",
-        showCancel: false
-      });
-
-    } catch (err) {
-      console.error(err);
+    if (delResult.error) {
       await showValidationModal({
         type: "error",
         title: "Delete Failed",
-        message: "Something went wrong while deleting this terminal.",
+        message: delResult.error,
         confirmText: "OK",
         showCancel: false
       });
+      return;
     }
+
+    map.removeLayer(marker);
+
+    await showValidationModal({
+      type: "success",
+      title: "Terminal Deleted",
+      message: "The terminal was removed successfully.",
+      confirmText: "OK",
+      showCancel: false
+    });
+
+  } catch (err) {
+    console.error(err);
+    await showValidationModal({
+      type: "error",
+      title: "Delete Failed",
+      message: "Something went wrong while deleting this terminal.",
+      confirmText: "OK",
+      showCancel: false
+    });
   }
+}
 
   // ==========================================================
   // FETCH TERMINALS + RENDER MARKERS
