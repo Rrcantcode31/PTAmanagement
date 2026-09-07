@@ -416,7 +416,7 @@
     .validation-modal-panel {
     position: relative;
     width: min(430px, calc(100% - 40px));
-    background: linear-gradient(135deg,#9ce0e0,#c9dbdb52);
+    background: linear-gradient(135deg,#9ce0e0,#c9dbdb);
     border-radius: 18px;
     padding: 30px 30px 25px;
     text-align: center;
@@ -551,7 +551,6 @@
     .highlight-value {
         font-weight: 700;
         color: #b91c1c;
-        background: #fee2e2;
         padding: 2px 7px;
         border-radius: 6px;
     }

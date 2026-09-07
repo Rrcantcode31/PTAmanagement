@@ -4,7 +4,7 @@ const mysql = require('mysql2/promise');
 const path = require("path");
 const dotenv = require("dotenv");
 const cookieParser = require('cookie-parser');
-const dbPool = require('./dbPool')
+const dbPool = require('./database/dbPool')
 const hbs = require('hbs');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
@@ -64,8 +64,11 @@ hbs.registerHelper('ifEquals', (a, b, options) => {
 
 app.set('view engine', 'hbs');
 
-app.use('/', pagesAuth);
+
+
 app.use('/', routeAuth);
+app.use('/', pagesAuth);
+
 
 const PORT = process.env.PORT || 4560;
 

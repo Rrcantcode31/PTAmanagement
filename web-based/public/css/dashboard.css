@@ -335,7 +335,6 @@
 .highlight-value {
   font-weight: 700;
   color: #b91c1c;
-  background: #fee2e2;
   padding: 2px 7px;
   border-radius: 6px;
 }
@@ -362,7 +361,7 @@
 
 .validation-modal-box {
   position: relative;
-  background: linear-gradient(135deg,#9ce0e0,#c9dbdb52);;
+  background: linear-gradient(135deg,#9ce0e0,#c9dbdb);;
   border-radius: 16px;
   padding: 28px 26px;
   width: 320px;

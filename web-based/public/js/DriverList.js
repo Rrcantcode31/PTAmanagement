@@ -314,51 +314,126 @@ document.addEventListener('DOMContentLoaded', async () => {
   // SAVE (ADD / UPDATE)
   // ==========================================================
 
-  saveBtn.addEventListener("click", async () => {
-    try {
-      const basePayload = {
-        email: document.getElementById("email").value.trim(),
-        password: document.getElementById("password").value,
-        first_name: document.getElementById("first_name").value.trim(),
-        middle_name: document.getElementById("middle_name").value.trim(),
-        last_name: document.getElementById("last_name").value.trim(),
-        contact_number: document.getElementById("contact_number").value.trim(),
-        plate_number: document.getElementById("plate_number").value.trim(),
-        type_id: document.getElementById("type_id").value,
-        terminal_id: document.getElementById("terminal_id").value,
+ saveBtn.addEventListener("click", async () => {
+  try {
+    const basePayload = {
+      email: document.getElementById("email").value.trim(),
+      password: document.getElementById("password").value,
+      first_name: document.getElementById("first_name").value.trim(),
+      middle_name: document.getElementById("middle_name").value.trim(),
+      last_name: document.getElementById("last_name").value.trim(),
+      contact_number: document.getElementById("contact_number").value.trim(),
+      plate_number: document.getElementById("plate_number").value.trim(),
+      type_id: document.getElementById("type_id").value,
+      terminal_id: document.getElementById("terminal_id").value,
+    };
+
+    let url;
+    let payload;
+    let successMessage;
+    let method = "POST";
+
+    // ==========================
+    // UPDATE DRIVER
+    // ==========================
+    if (updateMode) {
+      url = "/UpdateDriverCred";
+
+      // IMPORTANT:
+      // Backend route is router.put(...)
+      method = "PUT";
+
+      payload = {
+        driver_id: Number(selectedDriverId),
+        ...basePayload
       };
 
-      let url, payload, successMessage;
+      successMessage = "Driver updated successfully!";
 
-      if (updateMode) {
-        url = "/UpdateDriverCred";
-        payload = { driver_id: selectedDriverId, ...basePayload };
-        successMessage = "Driver updated successfully!";
-      } else {
-        url = "/InsertDriverInfo";
-        payload = { ...basePayload, role_id: document.getElementById("role_id").value, status: "Inactive" };
-        successMessage = "Driver added successfully!";
-      }
+    // ==========================
+    // ADD DRIVER
+    // ==========================
+    } else {
+      url = "/InsertDriverInfo";
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to save driver");
+      method = "POST";
 
-      hideModal();
-      clearDriverModalInputs();
-      resetModes();
-      clearRowSelection();
-      alert(successMessage);
-      location.reload();
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
+      payload = {
+        ...basePayload,
+        role_id: document.getElementById("role_id").value,
+        status: "Inactive"
+      };
+
+      successMessage = "Driver added successfully!";
     }
-  });
+
+    console.log("Sending request:", {
+      method,
+      url,
+      payload
+    });
+
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload),
+      credentials: "include"
+    });
+
+    const contentType = res.headers.get("content-type") || "";
+
+    // Prevent "Unexpected token <" when server returns HTML
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+
+      console.error("Server returned non-JSON:", {
+        status: res.status,
+        response: text
+      });
+
+      throw new Error(
+        `Server returned an unexpected response (${res.status}).`
+      );
+    }
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(
+        data.message || "Failed to save driver"
+      );
+    }
+
+    hideModal();
+    clearDriverModalInputs();
+    resetModes();
+    clearRowSelection();
+
+    await showValidationModal({
+      type: "success",
+      title: updateMode ? "Driver Updated" : "Driver Added",
+      message: successMessage,
+      confirmText: "OK",
+      showCancel: false
+    });
+
+    location.reload();
+
+  } catch (err) {
+    console.error("Save driver error:", err);
+
+    await showValidationModal({
+      type: "error",
+      title: "Save Failed",
+      message: err.message || "Failed to save driver.",
+      confirmText: "OK",
+      showCancel: false
+    });
+  }
+});
 
   // ==========================================================
   // LOAD DRIVER LIST

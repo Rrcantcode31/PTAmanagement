@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { error } = require('console');
-const dbPool = require('../dbPool')
+const dbPool = require('../database/dbPool')
 
 //Admin Login
 exports.Login = async (req, res) => {
@@ -1066,6 +1066,10 @@ exports.getFarePrices = async (req, res) => {
       error: err.message
     });
   }
+};
+
+//Delete fare price data
+exports.deleteFarePrice = async (req, res) => {
 };
 
 // DISPATCH ZONE BACKEND
