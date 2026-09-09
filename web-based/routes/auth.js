@@ -15,7 +15,7 @@ router.post('/InsertDriverInfo', authController.isLoggedIn, authController.Inser
 router.post('/InsertFarePrice', authController.isLoggedIn, authController.InsertFarePrice);
 router.post('/postDispatchAreaZone', authController.isLoggedIn, authController.postDispatchZoneArea);
 router.put('/putDispatchAreaZone/:zone_id', authController.isLoggedIn, authController.putDispatchZoneArea);
-router.patch('/updateFarePrices', authController.isLoggedIn, authController.getFarePrices);
+router.put('/updateFarePrices', authController.isLoggedIn, authController.updateFarePrice);
 router.put('/UpdateDriverCred', authController.isLoggedIn, authController.UpdateDriverCred);
 
 //Admin get data
@@ -28,6 +28,7 @@ router.get('/getDispatchAreZone', authController.isLoggedIn, authController.getD
 //Admin delete function
 router.delete('/DeleteDriverInfo', authController.isLoggedIn, authController.DeleteDriverInfo);
 router.delete('/DeleteTerminalLocation/:terminal_id', authController.isLoggedIn, authController.DeleteTerminalLocation);
+router.delete('deleteFarePrice', authController.isLoggedIn, authController.deleteFarePrice);
 
 
 module.exports = router;

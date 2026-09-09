@@ -44,10 +44,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // ==========================================================
-  // VALIDATION / CONFIRMATION MODAL (replaces confirm()/alert())
-  // ==========================================================
-
   let validationResolve = null;
 
   function showValidationModal({

@@ -929,13 +929,12 @@ exports.updateFarePrice = async (req, res) => {
 
       if (boundResult.length === 0) {
         await connection.rollback();
-        connection.release();
 
         return res.status(404).json({
-          success: false,
-          message: "Terminal bound not found"
-        });
-      }
+        success: false,
+        message: "Terminal bound not found"
+    });
+}
 
       await connection.query(
         `UPDATE terminal_bounds
@@ -971,13 +970,12 @@ exports.updateFarePrice = async (req, res) => {
 
       if (fareResult.affectedRows === 0) {
         await connection.rollback();
-        connection.release();
 
         return res.status(404).json({
-          success: false,
-          message: "Fare price not found"
-        });
-      }
+        success: false,
+        message: "Fare price not found"
+    });
+}
 
       await connection.commit();
 
@@ -1070,6 +1068,101 @@ exports.getFarePrices = async (req, res) => {
 
 //Delete fare price data
 exports.deleteFarePrice = async (req, res) => {
+  try {
+
+    const { bounds_id } = req.params;
+
+    const boundIdNormalization =
+      bounds_id === "" || bounds_id === undefined ? null : bounds_id;
+
+    if (!boundIdNormalization) {
+      return res.status(400).json({
+        success: false,
+        message: "Fare price ID is required"
+      });
+    }
+
+    const connection = await dbPool.promise().getConnection();
+
+    await connection.beginTransaction();
+
+    try {
+
+      // Confirm the bound exists first
+      const [boundResult] = await connection.query(
+        `SELECT bounds_id
+         FROM terminal_bounds
+         WHERE bounds_id = ?`,
+        [boundIdNormalization]
+      );
+
+      if (boundResult.length === 0) {
+        await connection.rollback();
+        connection.release();
+
+        return res.status(404).json({
+          success: false,
+          message: "Terminal bound not found"
+        });
+      }
+
+      // Delete the fare price row first (references terminal_bounds)
+      await connection.query(
+        `DELETE FROM fare_prices WHERE bounds_id = ?`,
+        [boundIdNormalization]
+      );
+
+      // Then delete the parent terminal_bounds row
+      const [boundDeleteResult] = await connection.query(
+        `DELETE FROM terminal_bounds WHERE bounds_id = ?`,
+        [boundIdNormalization]
+      );
+
+      if (boundDeleteResult.affectedRows === 0) {
+        await connection.rollback();
+        connection.release();
+
+        return res.status(404).json({
+          success: false,
+          message: "Fare price not found"
+        });
+      }
+
+      await connection.commit();
+
+      return res.status(200).json({
+        success: true,
+        message: "Fare price deleted successfully",
+        bounds_id: boundIdNormalization
+      });
+
+    } catch (err) {
+
+      await connection.rollback();
+
+      console.error("Delete fare transaction error:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: "Transaction failed"
+      });
+
+    } finally {
+
+      connection.release();
+
+    }
+
+  } catch (err) {
+
+    console.error("deleteFarePrice error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+
+  }
 };
 
 // DISPATCH ZONE BACKEND
