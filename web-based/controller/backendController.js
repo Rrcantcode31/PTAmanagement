@@ -169,6 +169,8 @@ exports.logout = async (req, res) => {
   }
 };
 
+// {--- DASHBOARD TERMINAL MANAGEMENT BACKEND AREA ---}
+
 // AddterminalLocation
 exports.AddterminalLocation = async (req, res) => {
   try {
@@ -292,6 +294,8 @@ exports.getVehicles =async (req, res) => {
  res.status(500).json({error: 'Failed to fetch Vehicles'})
  }
 }
+
+// {--- DRIVER MANAGEMENT BACKEND AREA ---}
 
 // Admin Insert driver info and auth
 exports.InsertDriverCred = async (req, res) => {
@@ -744,6 +748,8 @@ exports.DeleteDriverInfo = async (req, res) => {
   }
 };
 
+// {--- FARE PRICE BACKEND AREA ---}
+
 // Admin Insert Fare Prices
 exports.InsertFarePrice = async (req, res) => {
         try{
@@ -1165,6 +1171,8 @@ exports.deleteFarePrice = async (req, res) => {
   }
 };
 
+//{--- DISPATCH AREA BACKEND AREA ---}
+
 // DISPATCH ZONE BACKEND
 exports.getDispatchZoneArea = async (req, res) => {
   try {
@@ -1462,5 +1470,132 @@ exports.putDispatchZoneArea = async (req, res) => {
       error: error.message
     });
 
+  }
+};
+
+
+// {--- DISPATCH QUEUEING AREA ---}
+
+// GET — dashboard polls this every ~5s (or listen on socket)
+exports.getQueueByZone = async (req, res) => {
+  try {
+    const { zone_id } = req.query;
+
+    const [rows] = await db.promise().query(
+      `SELECT
+         q.queue_id,
+         q.queue_status,
+         q.joined_at,
+         q.joined_latitude,
+         q.joined_longitude,
+         q.zone_id,
+         q.driver_info_id,
+         d.first_name, d.middle_name, d.last_name, d.contact_number,
+         v.plate_number, v.type_id, vt.type_name,
+         b.from_terminal_id, b.to_terminal_id,
+         tf.terminal_name AS from_terminal,
+         tt.terminal_name AS to_terminal
+       FROM vehicle_queue q
+       JOIN driver_info d       ON q.driver_info_id = d.driver_id
+       JOIN vehicles v          ON q.vehicle_id     = v.vehicle_id
+       LEFT JOIN vehicle_types vt ON v.type_id      = vt.type_id
+       LEFT JOIN terminal_bounds b ON q.bounds_id   = b.bounds_id
+       LEFT JOIN terminal_locations tf ON b.from_terminal_id = tf.terminal_id
+       LEFT JOIN terminal_locations tt ON b.to_terminal_id   = tt.terminal_id
+       WHERE q.queue_status = 'WAITING'
+         AND (? IS NULL OR q.zone_id = ?)
+       ORDER BY q.joined_at ASC`,
+      [zone_id || null, zone_id || null]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("getQueueByZone error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// POST — admin dispatches the next driver
+exports.dispatchDriver = async (req, res) => {
+  const { queue_id, approval_type = 'MANUAL', remarks = null } = req.body;
+
+  if (!queue_id) {
+    return res.status(400).json({ success: false, message: "queue_id required" });
+  }
+
+  const conn = await db.promise().getConnection();
+  await conn.beginTransaction();
+
+  try {
+    const [qRows] = await conn.query(
+      `SELECT * FROM vehicle_queue WHERE queue_id = ? AND queue_status = 'WAITING' FOR UPDATE`,
+      [queue_id]
+    );
+
+    if (qRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Queue entry not found or already dispatched."
+      });
+    }
+
+    const q = qRows[0];
+
+    // 1. Mark the queue entry as dispatched
+    await conn.query(
+      `UPDATE vehicle_queue
+          SET queue_status = 'DISPATCHED', served_at = NOW()
+        WHERE queue_id = ?`,
+      [queue_id]
+    );
+
+    // 2. Create the departure log
+    const [logResult] = await conn.query(
+      `INSERT INTO departure_logs
+         (queue_id, driver_info_id, vehicle_id, bounds_id,
+          departure_time, approved_by, approval_type,
+          remarks, created_at, zone_id)
+       VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, NOW(), ?)`,
+      [
+        queue_id,
+        q.driver_info_id,
+        q.vehicle_id,
+        q.bounds_id,
+        req.session?.adminAuth?.admin_id || null,
+        approval_type,
+        remarks,
+        q.zone_id
+      ]
+    );
+
+    await conn.commit();
+
+    // 3. Notify the driver + other admins
+    io.to(`driver:${q.driver_info_id}`).emit("dispatch:approved", {
+      departure_id: logResult.insertId,
+      queue_id,
+      bounds_id: q.bounds_id,
+      departed_at: Date.now()
+    });
+
+    io.to("admins").emit("queue:driver_dispatched", {
+      queue_id,
+      driver_info_id: q.driver_info_id,
+      departure_id: logResult.insertId
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Driver dispatched.",
+      departure_id: logResult.insertId
+    });
+
+  } catch (err) {
+    await conn.rollback();
+    console.error("dispatchDriver error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  } finally {
+    conn.release();
   }
 };
