@@ -782,6 +782,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
     });
 
+    socket.on('queue:driver_joined', function (entry) {
+      console.log('Driver joined queue:', entry);
+      addOrUpdateQueueCard(entry);
+    });
+
+    socket.on('queue:driver_dispatched', function (entry) {
+      console.log('Driver dispatched:', entry);
+      removeQueueCard(entry.queue_id);
+    });
+
   }
 
 

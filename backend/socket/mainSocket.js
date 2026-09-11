@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import { registerDriverHandlers } from "./driverSocket.js";
 import { registerAdminHandlers } from "./adminSocket.js";
+import { registerQueueHandlers } from "./queueHandlers.js";
 
 export function initSocket(server) {
   const io = new Server(server, {
@@ -20,6 +21,7 @@ export function initSocket(server) {
   io.on("connection", (socket) => {
     registerDriverHandlers(io, socket);
     registerAdminHandlers(io, socket);
+    registerQueueHandlers(io, socket);
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);

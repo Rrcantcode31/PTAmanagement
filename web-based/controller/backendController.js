@@ -1171,7 +1171,7 @@ exports.deleteFarePrice = async (req, res) => {
   }
 };
 
-//{--- DISPATCH AREA BACKEND AREA ---}
+//{--- DISPATCH BACKEND AREA ---}
 
 // DISPATCH ZONE BACKEND
 exports.getDispatchZoneArea = async (req, res) => {
@@ -1472,7 +1472,6 @@ exports.putDispatchZoneArea = async (req, res) => {
 
   }
 };
-
 
 // {--- DISPATCH QUEUEING AREA ---}
 
