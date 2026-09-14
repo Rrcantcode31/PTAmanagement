@@ -14,6 +14,7 @@ dotenv.config({path: './.env' });
 
 const routeAuth = require('./routes/auth');
 const pagesAuth = require('./routes/pages');
+const queueAuth = require('./routes/queueAuth');
 
 hbs.registerHelper('eq', (a, b) => a === b);
 
@@ -68,6 +69,7 @@ app.set('view engine', 'hbs');
 
 app.use('/', routeAuth);
 app.use('/', pagesAuth);
+app.use('/queue', queueAuth);
 
 
 const PORT = process.env.PORT || 4560;
