@@ -6,6 +6,7 @@
     <title>Routes | South Cotabato Transport</title>
     <link rel="icon" type="image/png" href="/stickers/logo-sys.png" />
     <script defer src="/js/SCroute.js"></script>
+    <script defer src="/js/queue-panel.js"></script>
     <link rel="stylesheet" href="/css/SCroute.css" />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
@@ -64,38 +65,51 @@
     </div>
 
     <!-- RIGHT SIDE -->
-    <div class="queue-column">
+<div class="queue-column">
 
-        <div class="queue-panel">
+    <div class="queue-panel">
 
-            <div class="queue-header">
-
-                <div class="queue-title">
-                    <h2><i class="fas fa-bus"></i> Vehicle Queueing</h2>
-                    <p>Real-time dispatch order based on route assignment</p>
-                </div>
-
-                <div class="route-selector">
-                <select id="terminal_id" name="terminal_id">
-                 <option value="">Select Terminal</option>
-                </select>
-                </div>
-
+        <div class="queue-header">
+            <div class="queue-title">
+                <h2><i class="fas fa-bus"></i> Vehicle Queueing</h2>
+                <p>Real-time dispatch order based on route assignment</p>
             </div>
 
-            <div class="table-wrapper">
-        <div class="head-column">
-          <div class="col-driver-name">Driver-name</div>
-          <div class="col-vehicle">plate-number</div>
-          <div class="col-id">travel-count</div>
+            <div class="route-selector">
+                <select id="terminal_id" name="terminal_id">
+                    <option value="">Select Terminal</option>
+                </select>
+            </div>
         </div>
 
+        <!-- Live status bar -->
+        <div class="queue-status-bar">
+            <span class="queue-live-dot"></span>
+            <span id="queue-status-text">Select a terminal to view its queue</span>
+            <span id="queue-count-badge" class="queue-count-badge">0</span>
+        </div>
 
+        <!-- Table -->
+        <div class="table-wrapper">
+            <div class="head-column">
+                <div class="col-pos">#</div>
+                <div class="col-driver-name">Driver</div>
+                <div class="col-vehicle">Plate</div>
+                <div class="col-slot">Scheduled Slot</div>
+                <div class="col-action">Action</div>
             </div>
 
+            <div id="queue-list" class="queue-list"></div>
+
+            <div id="queue-empty" class="queue-empty">
+                <i class="fas fa-inbox"></i>
+                <p>No vehicles in queue</p>
+            </div>
         </div>
 
     </div>
+
+</div>
 
 </section>
 
