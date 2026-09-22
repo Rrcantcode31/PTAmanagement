@@ -292,40 +292,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function buildRow(r, position) {
-    const el = document.createElement('div');
-    el.className = 'queue-row';
-    el.dataset.queueId = r.queue_id;
+  const el = document.createElement('div');
+  el.className = 'queue-row';
+  el.dataset.queueId = r.queue_id;
 
-    const name = [r.first_name, r.middle_name, r.last_name]
-      .filter(Boolean)
-      .join(' ') || 'Unknown';
+  const name = [r.first_name, r.middle_name, r.last_name]
+    .filter(Boolean)
+    .join(' ') || 'Unknown';
 
-    const inside = r.driver_status === 'ACTIVE';
+  const inside  = r.driver_status === 'ACTIVE';
+  const isFront = position === 1;
 
-    el.innerHTML = `
-      <div class="col-pos">${position}</div>
-      <div class="col-driver-name">
-        <span class="driver-status-dot ${inside ? 'in' : 'out'}"
-              title="${inside ? 'Inside polygon' : 'Outside polygon'}"></span>
-        <span>${name}</span>
-      </div>
-      <div class="col-vehicle">${r.plate_number || '—'}</div>
-      <div class="col-slot">
-        <div class="slot-time">${slotRange(r.scheduled_dispatch_at)}</div>
-        <div class="slot-hint">${timeUntil(r.scheduled_dispatch_at)}</div>
-      </div>
-      <div class="col-action">
-        <button class="btn-dispatch" data-queue-id="${r.queue_id}">
-          <i class="fas fa-paper-plane"></i> Dispatch
-        </button>
-      </div>
-    `;
+  // Status label + class
+  let statusLabel = 'Waiting';
+  let statusClass = 'status-waiting';
 
-    el.querySelector('.btn-dispatch')
-      .addEventListener('click', () => dispatchVehicle(r.queue_id));
-
-    return el;
+  if (isFront && inside) {
+    statusLabel = 'Next to depart';
+    statusClass = 'status-ready';
+  } else if (isFront && !inside) {
+    statusLabel = 'Departing…';
+    statusClass = 'status-departing';
+  } else if (!inside) {
+    statusLabel = 'Moved out';
+    statusClass = 'status-transit';
   }
+
+  el.innerHTML = `
+    <div class="col-pos">${position}${isFront ? ' 👑' : ''}</div>
+    <div class="col-driver-name">
+      <span class="driver-status-dot ${inside ? 'in' : 'out'}"
+            title="${inside ? 'Inside polygon' : 'Outside polygon'}"></span>
+      <span>${name}</span>
+    </div>
+    <div class="col-vehicle">${r.plate_number || '—'}</div>
+    <div class="col-slot">
+      <div class="slot-time">${slotRange(r.scheduled_dispatch_at)}</div>
+      <div class="slot-hint">${timeUntil(r.scheduled_dispatch_at)}</div>
+    </div>
+    <div class="col-status ${statusClass}">${statusLabel}</div>
+  `;
+
+  return el;
+}
 
   // ==================================================
   // QUEUE — DISPATCH

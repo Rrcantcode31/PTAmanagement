@@ -516,3 +516,23 @@ body {
         gap: 10px;
     }
 }
+
+/* Status column */
+.col-status {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.col-status.status-ready     { color: #16a34a; }  /* green — next to depart */
+.col-status.status-departing { color: #d97706; }  /* amber — leaving */
+.col-status.status-waiting   { color: #6b7280; }  /* gray */
+.col-status.status-transit   { color: #9ca3af; }  /* light gray — moved out */
+
+/* Slightly widen the status column */
+.head-column,
+.queue-row {
+  grid-template-columns: 32px 1.8fr 1.1fr 1.5fr 130px;
+}
