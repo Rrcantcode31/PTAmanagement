@@ -8,15 +8,16 @@ const dbPool = require('../database/dbPool')
 // GET /queue?zone_id=1&bounds_id=5
 // List all WAITING drivers, optionally filtered
 // ============================================
-exports.getQueueByZone = async (req, res) => { 
+exports.getQueueByZone = async (req, res) => {
   try {
-    const { zone_id, bounds_id } = req.query;
+    const { zone_id, bounds_id, terminal_id } = req.query;
 
     const [rows] = await dbPool.promise().query(
       `SELECT
          q.queue_id,
          q.queue_status,
          q.joined_at,
+         q.scheduled_dispatch_at,
          q.joined_latitude,
          q.joined_longitude,
          q.zone_id,
@@ -34,9 +35,12 @@ exports.getQueueByZone = async (req, res) => {
          b.to_terminal_id,
          tf.terminal_name AS from_terminal,
          tt.terminal_name AS to_terminal,
-         dz.zone_name
+         dz.zone_name,
+         dz.terminal_id,
+         a.status AS driver_status
        FROM vehicle_queue q
        JOIN driver_info d          ON q.driver_info_id = d.driver_id
+       LEFT JOIN driverauth a      ON d.driver_id      = a.driver_id
        JOIN vehicles v             ON q.vehicle_id     = v.vehicle_id
        LEFT JOIN vehicle_types vt  ON v.type_id        = vt.type_id
        LEFT JOIN terminal_bounds b ON q.bounds_id      = b.bounds_id
@@ -46,27 +50,20 @@ exports.getQueueByZone = async (req, res) => {
        WHERE q.queue_status = 'WAITING'
          AND (? IS NULL OR q.zone_id = ?)
          AND (? IS NULL OR q.bounds_id = ?)
-       ORDER BY q.joined_at ASC`,
+         AND (? IS NULL OR dz.terminal_id = ?)
+       ORDER BY q.scheduled_dispatch_at ASC, q.joined_at ASC`,
       [
-        zone_id || null, zone_id || null,
-        bounds_id || null, bounds_id || null,
+        zone_id     || null, zone_id     || null,
+        bounds_id   || null, bounds_id   || null,
+        terminal_id || null, terminal_id || null,
       ]
     );
 
-    // Position in line (1-based)
-    const data = rows.map((row, index) => ({
-      ...row,
-      position: index + 1,
-    }));
-
-    return res.status(200).json({ success: true, data });
+    const data = rows.map((row, index) => ({ ...row, position: index + 1 }));
+    res.json({ success: true, data });
   } catch (err) {
     console.error("getQueueByZone error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch queue",
-      error: err.message,
-    });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
