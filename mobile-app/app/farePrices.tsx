@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
 
   margin: 5,
   padding: 5,
-  height: 600,
+  height: 650,
 
   shadowColor: '#f9f9f956',
   shadowOffset: {
@@ -267,7 +267,7 @@ discModdHeader:{
  row: {
     position: "absolute",
     bottom: 25,
-    width: "90%", // Extends the bar across the screen width
+    width: "98%", // Extends the bar across the screen width
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",

@@ -8,7 +8,7 @@ const dbPool = require('../database/dbPool')
 // GET /queue?zone_id=1&bounds_id=5
 // List all WAITING drivers, optionally filtered
 // ============================================
-exports.getQueueByZone = async (req, res) => {
+exports.getQueueByZone = async (req, res) => { 
   try {
     const { zone_id, bounds_id } = req.query;
 

@@ -1,15 +1,16 @@
 import db from "../config/env.js";
 import { findZoneContainingPoint } from "./helper/geofence.js";
 
-// ============================================================
-// Slot length — every queued vehicle gets this many minutes.
-// Env-overridable so you can tune per terminal/environment.
-// ============================================================
 const SLOT_DURATION_MINUTES = Number(process.env.SLOT_DURATION_MINUTES || 30);
 
 export function registerDriverHandlers(io, socket) {
 
-  socket.on("location:update", async ({ driverId, latitude, longitude, boundsId = null }) => {
+  socket.on("location:update", async ({
+    driverId,
+    latitude,
+    longitude,
+    boundsId = null,
+  }) => {
     try {
       if (!driverId || latitude == null || longitude == null) return;
 
@@ -43,6 +44,19 @@ export function registerDriverHandlers(io, socket) {
       // ---------- 5. Only act on INACTIVE -> ACTIVE ----------
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
 
+      console.log("[queue-debug]", {
+        driverId,
+        vehicleId,
+        boundsId,
+        previousStatus,
+        newStatus,
+        insideZone,
+        zone: matchedZone?.zone_name || null,
+        justEntered,
+        lat: latitude,
+        lng: longitude,
+      });
+
       if (justEntered && vehicleId) {
 
         // 5a. Skip if already WAITING — never duplicate.
@@ -57,9 +71,7 @@ export function registerDriverHandlers(io, socket) {
 
         if (!hasWaiting) {
 
-          // 5b. Compute this vehicle's slot.
-          //     Rule: scheduled = (latest WAITING schedule) + SLOT
-          //     If queue is empty: scheduled = NOW() + SLOT
+          // 5b. Compute slot
           const [schedRows] = await db.promise().query(
             `SELECT MAX(scheduled_dispatch_at) AS latest
                FROM vehicle_queue
@@ -72,11 +84,18 @@ export function registerDriverHandlers(io, socket) {
             baseTime.getTime() + SLOT_DURATION_MINUTES * 60 * 1000
           );
 
-          // MySQL DATETIME format: YYYY-MM-DD HH:MM:SS
           const scheduledStr = scheduledDispatchAt
             .toISOString()
             .slice(0, 19)
             .replace("T", " ");
+
+          console.log("[queue-debug] inserting", {
+            driverId,
+            vehicleId,
+            boundsId,
+            scheduledStr,
+            zoneId: matchedZone.zone_id,
+          });
 
           const [result] = await db.promise().query(
             `INSERT INTO vehicle_queue
@@ -97,20 +116,20 @@ export function registerDriverHandlers(io, socket) {
           );
 
           const joinedEntry = {
-            queue_id:             result.insertId,
+            queue_id:              result.insertId,
             driverId,
             vehicleId,
             boundsId,
-            zone_id:              matchedZone.zone_id,
-            zone_name:            matchedZone.zone_name,
-            joined_at:            Date.now(),
+            zone_id:               matchedZone.zone_id,
+            zone_name:             matchedZone.zone_name,
+            joined_at:             Date.now(),
             scheduled_dispatch_at: scheduledStr,
             slot_duration_minutes: SLOT_DURATION_MINUTES,
           };
 
           io.to("admins").emit("queue:driver_joined", joinedEntry);
           socket.emit("queue:joined", joinedEntry);
-        }
+        } 
       }
 
       // ---------- 6. Broadcast location ----------
@@ -124,7 +143,7 @@ export function registerDriverHandlers(io, socket) {
       });
 
     } catch (err) {
-      console.error("Socket location update error:", err);
+      console.error("[queue-debug] FAILED:", err.message, err.code);
     }
   });
 }
