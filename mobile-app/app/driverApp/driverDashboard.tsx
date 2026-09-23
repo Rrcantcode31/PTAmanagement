@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import GridNavButton from "../components/GridNavButton";
 import { useAuth } from "../../appContext/authContext";
@@ -52,10 +53,15 @@ export default function DriverDashboard() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <ImageBackground
-        source={require("../../assets/images/main-bg.png")}
         style={styles.bgImage}
         resizeMode="cover"
       >
+        <LinearGradient
+          colors={['rgb(86, 241, 241)', 'rgba(218, 222, 222, 0.59)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.overlay}
+        >
         <View style={styles.overlay}>
           <ScrollView
             contentContainerStyle={styles.container}
@@ -247,6 +253,7 @@ export default function DriverDashboard() {
             <GridNavButton title="Profile" route="./driverProfile" icon="account-circle" />
           </View>
         </View>
+        </LinearGradient>
       </ImageBackground>
     </SafeAreaView>
   );
@@ -256,7 +263,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-    backgroundColor: "#0F172A",
   },
   bgImage: {
     flex: 1,
@@ -284,10 +290,11 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 22,
-    fontFamily: "monster_act",
+    fontFamily: "monsterrat_kp",
     color: "#0F172A",
     marginTop: 2,
   },
+
   avatarButton: {
     width: 44,
     height: 44,
@@ -498,11 +505,25 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bottomBar: {
+     position: "absolute",
+    bottom: 25,
+    width: "90%", // Extends the bar across the screen width
+    alignSelf: "center",
     flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    height: 46, // Keeps the slim height
+    
+    backgroundColor: "rgba(233, 233, 233, 0.64)",
+    borderWidth: 0.8,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
   },
 });

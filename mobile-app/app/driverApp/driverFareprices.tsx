@@ -10,11 +10,7 @@ export default function driverFarePrices() {
     const pathname = usePathname();
 
   return (
-    <SafeAreaView style={{ 
-          flex: 1, 
-          paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, 
-        }}>
-          
+    <SafeAreaView style={styles.safeArea}>
           <ImageBackground
             source={require('../../assets/images/main-bg.png')}
             style={{ flex: 1 }}
@@ -100,6 +96,11 @@ export default function driverFarePrices() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+
   container: {
     flexGrow: 1,
   },
@@ -259,13 +260,26 @@ discModdHeader:{
     borderRightWidth: .3
         },
   row: {
+    position: "absolute",
+    bottom: 25,
+    width: "90%", // Extends the bar across the screen width
+    alignSelf: "center",
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#ffffff17",
-    paddingHorizontal: 5,
-    paddingBottom:2,
-    height: 50,
-    marginTop: 5,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    height: 46, // Keeps the slim height
+    
+    backgroundColor: "rgba(233, 233, 233, 0.64)",
+    borderWidth: 0.8,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
   },
 
 });

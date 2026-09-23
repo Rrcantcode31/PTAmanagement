@@ -86,7 +86,7 @@ export const login = async (req, res) => {
         type: account.type, // 🔥 important (user or driver)
       },
       process.env.TOKEN_PASSWORD,
-      { expiresIn: "7d" }
+      { expiresIn: process.env.TOKEN_EXPIRATION || "90d" }
     );
 
     // ================= RESPONSE =================
@@ -194,7 +194,7 @@ export const signup = async (req, res) => {
       const token = jwt.sign(
         { userId, email, roleId: role_id },
         process.env.TOKEN_PASSWORD,
-        { expiresIn: "7d" }
+        { expiresIn: process.env.TOKEN_EXPIRATION || "90d" } 
       );
 
       res.status(201).json({

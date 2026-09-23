@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View, TextInput, Button, StyleSheet, Alert } from "react-native";
+import { Text, View, TextInput, SafeAreaView, Button, Platform, StatusBar, StyleSheet, Alert } from "react-native";
 import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import { TouchableOpacity, ImageBackground} from "react-native";
@@ -55,6 +55,7 @@ const handleLogin = async () => {
         };
 
   return (
+    <SafeAreaView style={styles.safeArea}>
     <ImageBackground
       source={require('../assets/images/main-bg.png')}
       style={{ flex: 1 }}
@@ -87,10 +88,16 @@ const handleLogin = async () => {
       </Text>
     </View>
   </ImageBackground>
+  </SafeAreaView>
 );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  
   container: {
     flex: 1,
     justifyContent: "flex-start",

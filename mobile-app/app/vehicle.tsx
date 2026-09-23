@@ -17,10 +17,7 @@ export default function vehicle() {
   if (!fontsLoaded) return null;
 
   return (
-    <SafeAreaView style={{ 
-      flex: 1, 
-      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, 
-    }}>
+    <SafeAreaView style={styles.safeArea}>
 
       <ImageBackground
             source={require('../assets/images/main-bg.png')}
@@ -83,6 +80,11 @@ export default function vehicle() {
 }
 
 const styles = StyleSheet.create({
+  safeArea:{
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+
   container: {
     padding: 15,
     flexGrow: 1,

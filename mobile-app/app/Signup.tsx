@@ -1,4 +1,4 @@
-import { View, Text, TextInput, Alert, StyleSheet, ScrollView, ImageBackground} from "react-native";
+import { View, Text, TextInput, SafeAreaView, Platform, StatusBar, Alert, StyleSheet, ScrollView, ImageBackground} from "react-native";
 import { useState } from "react";
 import axios from "axios";
 import { useFonts } from "expo-font";
@@ -58,6 +58,7 @@ export default function Register() {
   };
 
   return (
+    <SafeAreaView style={styles.safeArea}>
     <ImageBackground
           source={require('../assets/images/main-bg.png')}
           style={{ flex: 1 }}
@@ -98,10 +99,16 @@ export default function Register() {
       </Text>
     </ScrollView>
     </ImageBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+      flex: 1,
+      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    },
+
     container: {
     flex: 1,
     justifyContent: "flex-start",

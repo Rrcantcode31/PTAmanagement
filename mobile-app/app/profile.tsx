@@ -23,10 +23,7 @@ export default function profile() {
     : 'Commuter';
 
   return (
-    <SafeAreaView style={{ 
-      flex: 1, 
-      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, 
-    }}>
+    <SafeAreaView style={styles.safeArea}>
 
       <ImageBackground
             source={require('../assets/images/main-bg.png')}
@@ -92,6 +89,11 @@ export default function profile() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+
   container: {
     padding: 15,
     flexGrow: 1,

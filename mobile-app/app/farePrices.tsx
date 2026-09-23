@@ -13,11 +13,7 @@ export default function FarePrices() {
 
 
   return (
-    <SafeAreaView style={{ 
-      flex: 1, 
-      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, 
-    }}>
-      
+    <SafeAreaView style={styles.safeArea}>
       <ImageBackground
         source={require('../assets/images/main-bg.png')}
         style={{ flex: 1 }}
@@ -108,10 +104,14 @@ export default function FarePrices() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  
   container: {
     flexGrow: 1,
   },
-
   header: {
     padding: 15,
   },
