@@ -2,6 +2,8 @@ import db from "../config/env.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+
+// Login  for driver and commuter
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -113,7 +115,7 @@ export const login = async (req, res) => {
   }
 };
 
-// SIGNUP for user only
+// SIGNUP for commuters only
 export const signup = async (req, res) => {
   try {
     const {
@@ -123,15 +125,14 @@ export const signup = async (req, res) => {
       lastName,
       middleName,
       contactNumber,
-      role_id,
+      fareCategory,   // 'regular' | 'student' | 'pwd' | 'senior'
     } = req.body;
 
-    // Validation
-    if (!email || !password || !firstName || !lastName || !role_id) {
+    // ---------- 1. Required fields ----------
+    if (!email || !password || !firstName || !lastName || !fareCategory) {
       return res.status(400).json({
         success: false,
-        message:
-          "Please provide all required fields: email, password, firstName, lastName, role",
+        message: "Please provide email, password, first name, last name, and fare category",
       });
     }
 
@@ -142,13 +143,26 @@ export const signup = async (req, res) => {
       });
     }
 
-    if (![3, 4].includes(Number(role_id))) {
+    // ---------- 2. Server-side allowlist ----------
+    // Matching your roles table:
+    //   3 = Regular, 4 = Student, 5 = PWD, 6 = Senior citizen
+    const COMMUTER_ROLE_MAP = {
+      regular: 3,
+      student: 4,
+      pwd:     5,
+      senior:  6,
+    };
+
+    const role_id = COMMUTER_ROLE_MAP[fareCategory.toLowerCase()];
+
+    if (!role_id) {
       return res.status(400).json({
         success: false,
-        message: "Invalid role selected",
+        message: "Invalid fare category",
       });
     }
 
+    // ---------- 3. Duplicate check ----------
     const [existingUsers] = await db.promise().query(
       "SELECT user_id FROM userauth WHERE email = ?",
       [email]
@@ -161,63 +175,74 @@ export const signup = async (req, res) => {
       });
     }
 
+    // ---------- 4. Hash password ----------
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Transaction
+    // ---------- 5. Insert into userauth + user_info ----------
     const connection = await db.promise().getConnection();
     await connection.beginTransaction();
 
     try {
-      // Insert into userauth
       const [userResult] = await connection.query(
-        "INSERT INTO userauth (email, password, role_id, created_at) VALUES (?, ?, ?, NOW())",
+        `INSERT INTO userauth (email, password, role_id, created_at)
+         VALUES (?, ?, ?, NOW())`,
         [email, hashedPassword, role_id]
       );
 
       const userId = userResult.insertId;
 
-      // Insert into user_info
       await connection.query(
-        "INSERT INTO user_info (user_id, first_name, middle_name, last_name, contact_number) VALUES (?, ?, ?, ?, ?)",
-        [
-          userId,
-          firstName,
-          middleName || null,
-          lastName,
-          contactNumber || null,
-        ]
+        `INSERT INTO user_info
+           (user_id, first_name, middle_name, last_name, contact_number)
+         VALUES (?, ?, ?, ?, ?)`,
+        [userId, firstName, middleName || null, lastName, contactNumber || null]
       );
 
       await connection.commit();
 
-      // Token
+      // ---------- 6. Get role_name ----------
+      const [roleRows] = await db.promise().query(
+        "SELECT role_name FROM roles WHERE role_id = ?",
+        [role_id]
+      );
+      const role_name = roleRows[0]?.role_name || "Regular";
+
+      // ---------- 7. JWT — same shape as login ----------
       const token = jwt.sign(
-        { userId, email, roleId: role_id },
+        {
+          id: userId,
+          role: role_name,
+          type: "user",
+        },
         process.env.TOKEN_PASSWORD,
-        { expiresIn: process.env.TOKEN_EXPIRATION || "90d" } 
+        { expiresIn: process.env.TOKEN_EXPIRATION || "90d" }
       );
 
-      res.status(201).json({
+      // ---------- 8. Respond — same shape as login ----------
+      return res.status(201).json({
         success: true,
         message: "User registered successfully",
         token,
         user: {
-          userId,
+          id: userId,
           email,
           firstName,
           lastName,
-          role: role_id === 3 ? "Student" : "Regular",
+          role: role_name,
+          type: "user",
         },
       });
+
     } catch (error) {
       await connection.rollback();
       throw error;
     } finally {
       connection.release();
     }
+
   } catch (error) {
     console.error("Signup error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,
@@ -261,7 +286,7 @@ export const getDriverInfo = async (req, res) => {
       FROM  driver_info d
       LEFT JOIN driverauth r ON d.driver_id = r.driver_id
       LEFT JOIN vehicles t ON d.vehicle_id = t.vehicle_id
-      LEFT JOIN vehicle_types v ON  t.type_id = v.type_ids
+      LEFT JOIN vehicle_types v ON  t.type_id = v.type_id
       `;
 
       const [rows] = await db.promise().query(getInfo);
