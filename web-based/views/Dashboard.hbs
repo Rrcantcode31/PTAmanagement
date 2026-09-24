@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script defer src="/js/dashboard.js"></script>
+  <script defer src="/js/admin-profile.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
@@ -37,6 +38,22 @@
     <!-- MAIN CONTENT -->
     <main class="main-content">
 
+      <div class="dashboard-row">
+
+      <div 
+          id="admin-profile-trigger" 
+          class="admin-profile-avatar"
+          role="button"
+          tabindex="0"
+          aria-label="Open admin profile"
+      >
+          <img 
+              src="{{#if adminAuth.profile_image}}{{adminAuth.profile_image}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
+              alt="Admin"
+              onerror="this.src='https://ui-avatars.com/api/?name=A&background=999&color=fff'"
+          />
+      </div>
+
       <!-- HEADER -->
       <header class="dashboard-header">
         <div class="header-left">
@@ -44,12 +61,14 @@
           <p>Dashboard Overview</p>
         </div>
 
-        <div class="header-right">
-    <div class="admin-info">
-        <a href="/Logout">Logout</a>
+            <div class="header-right">
+        <div class="admin-info">
+            <a href="/Logout">Logout</a>
+        </div>
     </div>
-</div>
             </header>
+
+      </div>
 
       <section class="stats-section">
 
@@ -83,41 +102,121 @@
     <button class="delete-btn">Delete</button>
   </div>
 
-<!-- After map click: coordinates + editable name/address (from reverse geocode) -->
-<div id="terminal-modal" class="terminal-modal hidden" role="dialog" aria-labelledby="terminal-modal-title">
-  <h3 id="terminal-modal-title">New terminal</h3>
-  <p class="modal-field">
-    <label for="modal-name-input">Name</label>
-    <input type="text" id="modal-name-input" autocomplete="off" />
-  </p>
-  <p class="modal-field">
-    <label for="modal-address-input">Address</label>
-    <textarea id="modal-address-input" rows="3"></textarea>
-  </p>
-  <p id="modal-geocode-note" class="modal-note"></p>
+  <!-- After map click: coordinates + editable name/address (from reverse geocode) -->
+  <div id="terminal-modal" class="terminal-modal hidden" role="dialog" aria-labelledby="terminal-modal-title">
+    <h3 id="terminal-modal-title">New terminal</h3>
+    <p class="modal-field">
+      <label for="modal-name-input">Name</label>
+      <input type="text" id="modal-name-input" autocomplete="off" />
+    </p>
+    <p class="modal-field">
+      <label for="modal-address-input">Address</label>
+      <textarea id="modal-address-input" rows="3"></textarea>
+    </p>
+    <p id="modal-geocode-note" class="modal-note"></p>
 
-  <p><strong>Latitude:</strong> <span id="modal-lat"></span></p>
-  <p><strong>Longitude:</strong> <span id="modal-lng"></span></p>
-  
-  <div class="modal-actions">
-    <button type="button" id="modal-save">Save</button>
-    <button type="button" id="modal-close">Cancel</button>
-  </div>
-</div>
-
-<!-- Validation / Confirmation Modal -->
-<div id="validation-modal" class="validation-modal hidden">
-  <div class="validation-modal-overlay"></div>
-  <div class="validation-modal-box">
-    <div id="validation-icon" class="validation-icon">⚠️</div>
-    <h3 id="validation-title">Warning</h3>
-    <p id="validation-message"></p>
-    <div class="validation-actions">
-      <button type="button" id="validation-cancel">Cancel</button>
-      <button type="button" id="validation-confirm">OK</button>
+    <p><strong>Latitude:</strong> <span id="modal-lat"></span></p>
+    <p><strong>Longitude:</strong> <span id="modal-lng"></span></p>
+    
+    <div class="modal-actions">
+      <button type="button" id="modal-save">Save</button>
+      <button type="button" id="modal-close">Cancel</button>
     </div>
   </div>
-</div>
+
+  <!-- Validation / Confirmation Modal -->
+  <div id="validation-modal" class="validation-modal hidden">
+    <div class="validation-modal-overlay"></div>
+    <div class="validation-modal-box">
+      <div id="validation-icon" class="validation-icon">⚠️</div>
+      <h3 id="validation-title">Warning</h3>
+      <p id="validation-message"></p>
+      <div class="validation-actions">
+        <button type="button" id="validation-cancel">Cancel</button>
+        <button type="button" id="validation-confirm">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==============================
+     ADMIN PROFILE — SLIDE DOWN PANEL
+     ============================== -->
+<div id="admin-drawer-overlay" class="drawer-overlay"></div>
+
+<aside id="admin-drawer" class="admin-drawer" aria-hidden="true">
+
+    <div class="drawer-header">
+        <h2><i class="fas fa-user-shield"></i> Admin Profile</h2>
+        <button id="admin-drawer-close" class="drawer-close" aria-label="Close">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="drawer-body">
+
+        <div class="drawer-avatar">
+            <img
+                src="{{#if adminAuth.profile_image}}{{adminAuth.profile_image}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
+                alt="Admin"
+                onerror="this.src='https://ui-avatars.com/api/?name=A&background=999&color=fff&size=200'"
+            />
+        </div>
+
+        <h3 class="drawer-name">
+            {{adminAuth.first_name}} {{adminAuth.last_name}}
+        </h3>
+
+        <span class="drawer-role-badge">{{adminAuth.role}}</span>
+
+        <div class="drawer-info">
+
+            <div class="drawer-info-row">
+                <span class="drawer-info-label">
+                    <i class="fas fa-user"></i> Full Name
+                </span>
+                <span class="drawer-info-value">
+                    {{adminAuth.first_name}} {{adminAuth.last_name}}
+                </span>
+            </div>
+
+            <div class="drawer-info-row">
+                <span class="drawer-info-label">
+                    <i class="fas fa-envelope"></i> Email
+                </span>
+                <span class="drawer-info-value">
+                    {{adminAuth.email}}
+                </span>
+            </div>
+
+            <div class="drawer-info-row">
+                <span class="drawer-info-label">
+                    <i class="fas fa-shield-alt"></i> Role
+                </span>
+                <span class="drawer-info-value">
+                    {{adminAuth.role}}
+                </span>
+            </div>
+
+            {{#if adminAuth.contact_number}}
+            <div class="drawer-info-row">
+                <span class="drawer-info-label">
+                    <i class="fas fa-phone"></i> Contact
+                </span>
+                <span class="drawer-info-value">
+                    {{adminAuth.contact_number}}
+                </span>
+            </div>
+            {{/if}}
+
+        </div>
+
+        <a href="/Logout" class="drawer-logout-btn">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+
+    </div>
+</aside>
 
 </body>
+
 </html>
