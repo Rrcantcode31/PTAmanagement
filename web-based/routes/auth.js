@@ -7,6 +7,8 @@ const authController = require('../controller/backendController');
 router.post('/Login', authController.Login);
 //end session
 router.get('/Logout', authController.logout);
+// admin profile mnger
+router.post('/update-profile', authController.isLoggedIn, authController.updateAdminProfile);
 
 //Admin protected functions
 router.post('/AddTerminalLocation', authController.isLoggedIn, authController.AddterminalLocation);

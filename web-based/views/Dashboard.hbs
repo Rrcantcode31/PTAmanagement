@@ -48,7 +48,7 @@
           aria-label="Open admin profile"
       >
           <img 
-              src="{{#if adminAuth.profile_image}}{{adminAuth.profile_image}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
+              src="{{#if adminAuth.admin_profile}}{{adminAuth.admin_profile}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
               alt="Admin"
               onerror="this.src='https://ui-avatars.com/api/?name=A&background=999&color=fff'"
           />
@@ -142,7 +142,6 @@
      ADMIN PROFILE — SLIDE DOWN PANEL
      ============================== -->
 <div id="admin-drawer-overlay" class="drawer-overlay"></div>
-
 <aside id="admin-drawer" class="admin-drawer" aria-hidden="true">
 
     <div class="drawer-header">
@@ -154,65 +153,105 @@
 
     <div class="drawer-body">
 
-        <div class="drawer-avatar">
-            <img
-                src="{{#if adminAuth.profile_image}}{{adminAuth.profile_image}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
-                alt="Admin"
-                onerror="this.src='https://ui-avatars.com/api/?name=A&background=999&color=fff&size=200'"
-            />
+        <div class="drawer-left-col">
+            <div class="drawer-avatar-wrap">
+                <div class="drawer-avatar">
+                    <img id="drawer-avatar-src"
+                        src="{{#if adminAuth.admin_profile}}{{adminAuth.admin_profile}}{{else}}https://ui-avatars.com/api/?name={{adminAuth.first_name}}+{{adminAuth.last_name}}&background=43aca1&color=fff&size=200{{/if}}"
+                        alt="Admin"
+                        onerror="this.src='https://ui-avatars.com/api/?name=A&background=999&color=fff&size=200'" />
+                </div>
+
+                <button type="button" class="avatar-upload-btn" id="avatar-upload-btn" title="Change profile picture">
+                    <i class="fas fa-camera"></i>
+                </button>
+
+                <input type="file" id="avatar-file-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" />
+            </div>
+
+            <h3 class="drawer-name">{{adminAuth.first_name}} {{adminAuth.last_name}}</h3>
+            <span class="drawer-role-badge">{{adminAuth.role}}</span>
+
+            <div class="drawer-action-stack">
+                <button id="toggle-edit-btn" type="button" class="drawer-btn edit-toggle-btn">
+                    <i class="fas fa-pen"></i> Edit Profile
+                </button>
+                <a href="/Logout" class="drawer-btn logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
         </div>
 
-        <h3 class="drawer-name">
-            {{adminAuth.first_name}} {{adminAuth.last_name}}
-        </h3>
+        <div class="drawer-right-col">
 
-        <span class="drawer-role-badge">{{adminAuth.role}}</span>
-
-        <div class="drawer-info">
-
-            <div class="drawer-info-row">
-                <span class="drawer-info-label">
-                    <i class="fas fa-user"></i> Full Name
-                </span>
-                <span class="drawer-info-value">
-                    {{adminAuth.first_name}} {{adminAuth.last_name}}
-                </span>
+            <div id="profile-view-mode" class="profile-mode-section">
+                <div class="info-grid">
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-user"></i> First Name</span>
+                        <span class="info-value">{{adminAuth.first_name}}</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-user"></i> Middle Name</span>
+                        <span class="info-value">{{#if adminAuth.middle_name}}{{adminAuth.middle_name}}{{else}}—{{/if}}</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-user"></i> Last Name</span>
+                        <span class="info-value">{{adminAuth.last_name}}</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-envelope"></i> Email Address</span>
+                        <span class="info-value">{{adminAuth.email}}</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-phone"></i> Contact Number</span>
+                        <span class="info-value">{{#if adminAuth.contact_number}}{{adminAuth.contact_number}}{{else}}—{{/if}}</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label"><i class="fas fa-shield-alt"></i> Account Role</span>
+                        <span class="info-value">{{adminAuth.role}}</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="drawer-info-row">
-                <span class="drawer-info-label">
-                    <i class="fas fa-envelope"></i> Email
-                </span>
-                <span class="drawer-info-value">
-                    {{adminAuth.email}}
-                </span>
-            </div>
+            <form id="profile-edit-mode" class="profile-mode-section hidden" onsubmit="return false;">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="profile-first-name"><i class="fas fa-user"></i> First Name</label>
+                        <input id="profile-first-name" type="text" value="{{adminAuth.first_name}}" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-middle-name"><i class="fas fa-user"></i> Middle Name</label>
+                        <input id="profile-middle-name" type="text" value="{{adminAuth.middle_name}}" />
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-last-name"><i class="fas fa-user"></i> Last Name</label>
+                        <input id="profile-last-name" type="text" value="{{adminAuth.last_name}}" required />
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email (Read-only)</label>
+                        <input type="text" value="{{adminAuth.email}}" disabled class="disabled-input" />
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-contact"><i class="fas fa-phone"></i> Contact Number</label>
+                        <input id="profile-contact" type="text" value="{{adminAuth.contact_number}}" />
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-shield-alt"></i> Role (Read-only)</label>
+                        <input type="text" value="{{adminAuth.role}}" disabled class="disabled-input" />
+                    </div>
+                </div>
 
-            <div class="drawer-info-row">
-                <span class="drawer-info-label">
-                    <i class="fas fa-shield-alt"></i> Role
-                </span>
-                <span class="drawer-info-value">
-                    {{adminAuth.role}}
-                </span>
-            </div>
-
-            {{#if adminAuth.contact_number}}
-            <div class="drawer-info-row">
-                <span class="drawer-info-label">
-                    <i class="fas fa-phone"></i> Contact
-                </span>
-                <span class="drawer-info-value">
-                    {{adminAuth.contact_number}}
-                </span>
-            </div>
-            {{/if}}
+                <div class="form-actions">
+                    <button id="save-profile-btn" type="button" class="save-btn">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <button id="cancel-edit-btn" type="button" class="cancel-btn">
+                        Cancel
+                    </button>
+                </div>
+            </form>
 
         </div>
-
-        <a href="/Logout" class="drawer-logout-btn">
-            <i class="fas fa-sign-out-alt"></i> Logout
-        </a>
 
     </div>
 </aside>

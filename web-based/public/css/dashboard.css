@@ -181,246 +181,158 @@
         pointer-events: none;               /* clicks pass through to the div */
       }
 
-          /* ====================================
-      ADMIN PROFILE — SLIDE DOWN PANEL
-      ==================================== */
+            /* ====================================
+        ADMIN PROFILE — SLIDE DOWN PANEL
+        ==================================== */
 
-    /* Dim the page behind */
-    .drawer-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.45);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-      z-index: 9998;
-    }
+      /* Dark overlay behind the drawer */
+      .drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+        z-index: 9998;
+      }
 
-    .drawer-overlay.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
+      .drawer-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
 
-    /* The panel — starts above the viewport, slides down */
-    .admin-drawer {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 80vh;                       /* ← 80% of the viewport */
-      background: #ffffff;
-      border-radius: 0 0 24px 24px;       /* rounded bottom corners */
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-      transform: translateY(-100%);       /* hidden above */
-      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .admin-drawer.open {
-      transform: translateY(0);           /* slides down */
-    }
-
-    /* Header */
-    .drawer-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 18px 24px;
-      background: linear-gradient(135deg, #23786f, #369d91);
-      color: #fff;
-      border-radius: 0 0 0 0;
-    }
-
-    .drawer-header h2 {
-      font-size: 16px;
-      font-weight: 700;
-      margin: 0;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      letter-spacing: 0.3px;
-    }
-
-    .drawer-close {
-      background: rgba(255, 255, 255, 0.18);
-      border: none;
-      color: #fff;
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s ease, transform 0.2s ease;
-    }
-
-    .drawer-close:hover {
-      background: rgba(255, 255, 255, 0.32);
-      transform: rotate(90deg);
-    }
-
-    /* Body — two-column on desktop */
-    .drawer-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 30px 40px;
-      display: grid;
-      grid-template-columns: 220px 1fr;
-      gap: 40px;
-      align-items: start;
-    }
-
-    /* Left column — avatar + name + role + logout */
-    .drawer-body > .drawer-avatar,
-    .drawer-body > .drawer-name,
-    .drawer-body > .drawer-role-badge,
-    .drawer-body > .drawer-logout-btn {
-      grid-column: 1;
-    }
-
-    .drawer-body > .drawer-info {
-      grid-column: 2;
-      grid-row: 1 / span 4;
-    }
-
-    .drawer-avatar {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      overflow: hidden;
-      border: 4px solid #eaf6f4;
-      box-shadow: 0 6px 18px rgba(35, 120, 111, 0.15);
-      justify-self: center;
-      margin-bottom: 6px;
-    }
-
-    .drawer-avatar img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .drawer-name {
-      font-size: 20px;
-      font-weight: 700;
-      color: #1f3d38;
-      margin: 12px 0 8px;
-      text-align: center;
-    }
-
-    .drawer-role-badge {
-      display: inline-block;
-      background: #eaf6f4;
-      color: #23786f;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 5px 14px;
-      border-radius: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      justify-self: center;
-      margin-bottom: 20px;
-    }
-
-    /* Info rows on the right */
-    .drawer-info {
-      width: 100%;
-      border-radius: 14px;
-      background: #f9fbfb;
-      padding: 8px 20px;
-    }
-
-    .drawer-info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 0;
-      border-bottom: 1px solid #edf1f7;
-      gap: 20px;
-    }
-
-    .drawer-info-row:last-child {
-      border-bottom: none;
-    }
-
-    .drawer-info-label {
-      font-size: 12px;
-      color: #7c9a94;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .drawer-info-label i {
-      font-size: 12px;
-      color: #43aca1;
-      width: 14px;
-    }
-
-    .drawer-info-value {
-      font-size: 14px;
-      color: #1f3d38;
-      font-weight: 600;
-      text-align: right;
-      word-break: break-word;
-    }
-
-    /* Logout button */
-    .drawer-logout-btn {
-      width: 100%;
-      padding: 12px;
-      background: #23786f;
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      font-family: 'Montserrat', sans-serif;
-      font-weight: 700;
-      font-size: 13px;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: background 0.2s ease, transform 0.15s ease;
-      margin-top: 10px;
-    }
-
-    .drawer-logout-btn:hover {
-      background: #1d655d;
-      transform: translateY(-1px);
-    }
-
-    /* Small screens — single column */
-    @media (max-width: 720px) {
+      /* The drawer panel — starts above viewport */
       .admin-drawer {
-        height: 90vh;                     /* more room on mobile */
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 80vh;
+        background: #ffffff;
+        border-radius: 0 0 24px 24px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+        transform: translateY(-100%);
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
-      .drawer-body {
-        grid-template-columns: 1fr;
-        padding: 20px;
-        gap: 20px;
+
+      .admin-drawer.open {
+        transform: translateY(0);
       }
-      .drawer-body > .drawer-info {
-        grid-column: 1;
-        grid-row: auto;
+
+      /* Header inside the drawer */
+      .drawer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 24px;
+        background: linear-gradient(135deg, #23786f, #369d91);
+        color: #fff;
       }
+
+      .drawer-header h2 {
+        font-size: 16px;
+        font-weight: 700;
+        margin: 0;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        letter-spacing: 0.3px;
+      }
+
+      .drawer-close {
+        background: rgba(255, 255, 255, 0.18);
+        border: none;
+        color: #fff;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      .drawer-close:hover {
+        background: rgba(255, 255, 255, 0.32);
+        transform: rotate(90deg);
+      }
+
+      /* Avatar column */
+      .drawer-avatar-wrap {
+        position: relative;
+        display: inline-block;
+        margin-bottom: 14px;
+      }
+
       .drawer-avatar {
-        width: 100px;
-        height: 100px;
+        width: 130px;
+        height: 130px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 4px solid #eaf6f4;
+        box-shadow: 0 6px 18px rgba(35, 120, 111, 0.15);
       }
-    }
+
+      .drawer-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      /* Camera button on the avatar */
+      .avatar-upload-btn {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #23786f;
+        color: #fff;
+        border: 3px solid #fff;
+        cursor: pointer;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s ease, transform 0.2s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+
+      .avatar-upload-btn:hover {
+        background: #1d655d;
+        transform: scale(1.08);
+      }
+
+      /* Name + role badge */
+      .drawer-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1f3d38;
+        margin: 6px 0 8px;
+        text-align: center;
+      }
+
+      .drawer-role-badge {
+        display: inline-block;
+        background: #eaf6f4;
+        color: #23786f;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 14px;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 16px;
+      }
 
         /* DASHBOARD HEADER */
         .dashboard-header {
@@ -751,3 +663,181 @@
     .validation-modal.error #validation-confirm:hover {
       background: #c40000;
     }
+
+    /* ====================================
+   DRAWER INNER CONTENT
+   ==================================== */
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 30px;
+  align-items: start;
+}
+
+.drawer-left-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.drawer-action-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.drawer-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.edit-toggle-btn {
+  background: #eaf6f4;
+  color: #23786f;
+}
+
+.edit-toggle-btn:hover {
+  background: #319086;
+  color: #fff;
+}
+
+.logout-btn {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.logout-btn:hover {
+  background: #f5c6cb;
+}
+
+/* Info Grid (View Mode) */
+.info-grid,
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-label {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-label i {
+  color: #43aca1;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* Form Grid (Edit Mode) */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+  border-color: #319086;
+}
+
+.disabled-input {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.save-btn {
+  background: #319086;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel-btn {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-mode-section.hidden {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .drawer-body {
+    grid-template-columns: 1fr;
+  }
+  .info-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

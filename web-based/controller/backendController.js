@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs'); 
 const { error } = require('console');
 const dbPool = require('../database/dbPool')
 
@@ -23,7 +25,8 @@ exports.Login = async (req, res) => {
       i.first_name,
       i.middle_name,
       i.last_name,
-      i.contact_number
+      i.contact_number,
+      i.admin_profile
    FROM adminauth a
    JOIN roles r ON a.role_id = r.role_id
    JOIN admin_info i ON a.admin_id = i.admin_id
@@ -55,7 +58,8 @@ exports.Login = async (req, res) => {
     email: user.email,
     role: user.role_name,
     first_name: user.first_name,
-    last_name: user.last_name
+    last_name: user.last_name,
+    admin_profile: user.admin_profile,
 };
 
     const cookieOptions = {
@@ -98,7 +102,8 @@ exports.isLoggedIn = async (req, res, next) => {
           r.role_name,
           i.first_name,
           i.last_name,
-          i.contact_number
+          i.contact_number,
+          i.admin_profile
         FROM adminauth a
         JOIN roles r ON a.role_id = r.role_id
         JOIN admin_info i ON a.admin_id = i.admin_id
@@ -121,6 +126,7 @@ exports.isLoggedIn = async (req, res, next) => {
             role: user.role_name,
             first_name: user.first_name,
             last_name: user.last_name,
+            admin_profile: user.admin_profile,
           };
           res.locals.adminAuth = req.session.adminAuth;
           next();
@@ -166,6 +172,169 @@ exports.logout = async (req, res) => {
     res.clearCookie('jwT');
     res.clearCookie('randomSession');
     return res.redirect('/Login');
+  }
+};
+
+// admin profile picture update
+exports.uploadProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded." });
+    }
+
+    const adminId = req.session?.adminAuth?.admin_id;
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: "Not authenticated." });
+    }
+
+    const [rows] = await dbPool.promise().query(
+      "SELECT admin_profile FROM admin_info WHERE admin_id = ?",
+      [adminId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Admin not found." });
+    }
+
+    const oldImage = rows[0].admin_profile;
+    const newImageUrl = `/uploads/profiles/${req.file.filename}`;
+
+    await dbPool.promise().query(
+      "UPDATE admin_info SET admin_profile = ? WHERE admin_id = ?",
+      [newImageUrl, adminId]
+    );
+
+    // Clean up previous uploaded file (not remote/placeholder URLs)
+    if (oldImage && oldImage.startsWith("/uploads/profiles/")) {
+      const oldPath = path.join(
+        __dirname, "..", "public",
+        oldImage.replace(/^\/+/, "")
+      );
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (_) { /* ignore */ }
+      }
+    }
+
+    req.session.adminAuth.admin_profile = newImageUrl;
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile picture updated.",
+      profile_image: newImageUrl,
+    });
+
+  } catch (err) {
+    console.error("uploadProfilePicture error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload image.",
+      error: err.message,
+    });
+  }
+};
+
+// Admin profile mnger
+exports.updateAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.session?.adminAuth?.admin_id;
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: "Not authenticated." });
+    }
+
+    // ---- 1. Load current values ----
+    const [rows] = await dbPool.promise().query(
+      `SELECT first_name, middle_name, last_name, contact_number, admin_profile
+         FROM admin_info WHERE admin_id = ?`,
+      [adminId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Admin not found." });
+    }
+    const current = rows[0];
+
+    // ---- 2. Handle text fields (fall back to existing value) ----
+    const {
+      first_name     = current.first_name,
+      middle_name    = current.middle_name,
+      last_name      = current.last_name,
+      contact_number = current.contact_number,
+    } = req.body;
+
+    if (!first_name?.trim() || !last_name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "First name and last name are required.",
+      });
+    }
+
+    // ---- 3. Handle optional image ----
+    let newImageUrl = current.admin_profile;
+    let deleteOldImage = false;
+
+    if (req.file) {
+      newImageUrl = `/uploads/profiles/${req.file.filename}`;
+      deleteOldImage = true;
+    }
+
+    // ---- 4. Update DB ----
+    await dbPool.promise().query(
+      `UPDATE admin_info
+          SET first_name     = ?,
+              middle_name    = ?,
+              last_name      = ?,
+              contact_number = ?,
+              admin_profile  = ?
+        WHERE admin_id = ?`,
+      [
+        first_name.trim(),
+        middle_name || null,
+        last_name.trim(),
+        contact_number || null,
+        newImageUrl,
+        adminId,
+      ]
+    );
+
+    // ---- 5. Delete old image if a new one replaced it ----
+    if (
+      deleteOldImage &&
+      current.admin_profile &&
+      current.admin_profile.startsWith("/uploads/profiles/")
+    ) {
+      const oldPath = path.join(
+        __dirname, "..", "public",
+        current.admin_profile.replace(/^\/+/, "")
+      );
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
+      }
+    }
+
+    // ---- 6. Sync session ----
+    req.session.adminAuth.first_name     = first_name.trim();
+    req.session.adminAuth.last_name      = last_name.trim();
+    req.session.adminAuth.contact_number = contact_number || null;
+    req.session.adminAuth.admin_profile  = newImageUrl;
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      profile: {
+        first_name:     first_name.trim(),
+        middle_name:    middle_name || null,
+        last_name:      last_name.trim(),
+        contact_number: contact_number || null,
+        admin_profile:  newImageUrl,
+      },
+    });
+
+  } catch (err) {
+    console.error("updateAdminProfile error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update profile.",
+      error: err.message,
+    });
   }
 };
 
