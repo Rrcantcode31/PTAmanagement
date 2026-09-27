@@ -1,7 +1,8 @@
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   ImageBackground, StatusBar, ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import GridNavButton from "../components/GridNavButton";
 import { useFonts } from "expo-font";
 import { BlurView } from 'expo-blur';
@@ -28,8 +29,8 @@ export default function driverFarePrices() {
      const [error, setError]     = useState<string | null>(null);
    
      const [fontsLoaded] = useFonts({
-       monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
-       monster_act: require("../assets/Font/monster_act.ttf"),
+       monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
+       monster_act: require("../../assets/Font/monster_act.ttf"),
      });
    
      useEffect(() => {
@@ -69,10 +70,10 @@ export default function driverFarePrices() {
        v == null || v === '' ? '—' : `₱${Number(v).toFixed(2)}`;
    
      return (
-       <SafeAreaView style={styles.safeArea}>
+       <SafeAreaView edges={['top']} style={styles.safeArea}>
          <StatusBar barStyle="dark-content" />
          <ImageBackground
-           source={require('../assets/images/main-bg.png')}
+           source={require('../../assets/images/main-bg.png')}
            style={{ flex: 1 }}
            resizeMode="cover"
          >
@@ -178,11 +179,11 @@ export default function driverFarePrices() {
              </ScrollView>
    
              <View style={styles.row}>
-               <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-               <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
-               <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
-               <GridNavButton title="Vehicles"    route="/vehicle"    icon="car"                    active={pathname === "/vehicle"} />
-               <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
+               <GridNavButton title="Dashboard"   route="./driverDashboard"  icon="view-dashboard-outline" active={pathname === "./driverDashboard"} />
+               <GridNavButton title="Map routes"  route="./driverRoute"    icon="map-marker-path"        active={pathname === "./driverRoute"} />
+               <GridNavButton title="Fare prices" route="./driverFareprices" icon="cash-multiple"          active={pathname === "./driverFareprices"} />
+               <GridNavButton title="Vehicles"    route="./driverQueue"    icon="car"                    active={pathname === "./driverQueue"} />
+               <GridNavButton title="Profile"     route="./driverProfile"    icon="account-circle"         active={pathname === "./driverProfile"} />
              </View>
    
            </View>
@@ -203,8 +204,7 @@ export default function driverFarePrices() {
    
    const styles = StyleSheet.create({
      safeArea: {
-       flex: 1,
-       backgroundColor: '#F1F5F9',
+       flex: 1
      },
      container: {
        flexGrow: 1,

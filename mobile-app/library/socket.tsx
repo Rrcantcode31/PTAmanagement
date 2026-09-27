@@ -4,7 +4,7 @@ let socket: Socket | null = null;
 
 export function getSocket(token: string) {
   if (!socket) {
-    socket = io("https://ptamanagement-production.up.railway.app", {
+    socket = io("https://192.168.1.74/4570", {
       auth: { token },
     });
   }

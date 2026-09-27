@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar, ImageBackground } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Platform, StatusBar, ImageBackground } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { UrlTile, Marker } from "react-native-maps";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
@@ -19,7 +20,7 @@ export default function mapping() {
   if (!fontsLoaded) return null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
 
       <ImageBackground
             source={require('../assets/images/main-bg.png')}
@@ -108,8 +109,7 @@ export default function mapping() {
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    flex: 1
   },
 
   container: {

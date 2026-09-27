@@ -1,7 +1,8 @@
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   ImageBackground, StatusBar, ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import GridNavButton from "./components/GridNavButton";
 import { useFonts } from "expo-font";
 import { BlurView } from 'expo-blur';
@@ -68,7 +69,7 @@ export default function FarePrices() {
     v == null || v === '' ? '—' : `₱${Number(v).toFixed(2)}`;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <ImageBackground
         source={require('../assets/images/main-bg.png')}
@@ -202,8 +203,7 @@ const TABLE_WIDTH = (COL_ROUTE + COL_TO + COL_KM + COL_FARE * 4) + GAP * NUM_GAP
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
+    flex: 1
   },
   container: {
     flexGrow: 1,

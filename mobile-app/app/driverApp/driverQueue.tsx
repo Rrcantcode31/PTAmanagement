@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar, ImageBackground, FlatList } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ImageBackground, FlatList } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
@@ -100,7 +101,7 @@ export default function driverQueue() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ImageBackground
         source={require("../../assets/images/main-bg.png")}
         style={{ flex: 1 }}
@@ -168,8 +169,7 @@ export default function driverQueue() {
 
 const styles = StyleSheet.create({
   safeArea:{
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    flex: 1
   },
 
   container: {

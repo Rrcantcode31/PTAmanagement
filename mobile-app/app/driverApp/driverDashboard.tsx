@@ -5,11 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
-  Platform,
-  StatusBar,
   ImageBackground,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,8 +48,7 @@ export default function DriverDashboard() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ImageBackground
         style={styles.bgImage}
         resizeMode="cover"
@@ -261,8 +258,7 @@ export default function DriverDashboard() {
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+    flex: 1
   },
   bgImage: {
     flex: 1,

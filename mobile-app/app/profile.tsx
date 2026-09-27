@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar, ImageBackground } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, StatusBar, ImageBackground } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import GridNavButton from "./components/GridNavButton";
@@ -23,7 +24,7 @@ export default function profile() {
     : 'Commuter';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
 
       <ImageBackground
             source={require('../assets/images/main-bg.png')}
@@ -90,8 +91,7 @@ export default function profile() {
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    flex: 1
   },
 
   container: {

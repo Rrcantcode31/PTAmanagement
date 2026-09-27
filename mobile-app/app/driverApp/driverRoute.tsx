@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar, ImageBackground, Dimensions} from "react-native";
+import { View, Text, StyleSheet,  ImageBackground, Dimensions} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import WebView from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -174,7 +175,7 @@ export default function driverRoute() {
   `;
 
    return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ImageBackground
             source={require('../../assets/images/main-bg.png')}
             style={{ flex: 1 }}
@@ -221,8 +222,7 @@ export default function driverRoute() {
 
 const styles = StyleSheet.create({
   safeArea:{
-    flex:1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    flex:1
   },
   container: {
     padding: 15,
