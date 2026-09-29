@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     .join(' ') || 'Unknown';
 
   const inside  = r.driver_status === 'ACTIVE';
-  const isFront = position === 1;
+ const isFront = r.queue_status === 'WAITING';
 
   // Status label + class
   let statusLabel = 'Waiting';

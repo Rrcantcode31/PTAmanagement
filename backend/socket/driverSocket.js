@@ -16,11 +16,12 @@ export function registerDriverHandlers(io, socket) {
     driverId,
     latitude,
     longitude,
-    boundsId = null,          // still accepted if the app sends one
+    boundsId = null,
   }) => {
     try {
       if (!driverId || latitude == null || longitude == null) return;
 
+      // ---------- 1. Driver + vehicle + terminal ----------
       const [driverRows] = await db.promise().query(
         `SELECT terminal_id, vehicle_id FROM driver_info WHERE driver_id = ?`,
         [driverId]
@@ -28,12 +29,14 @@ export function registerDriverHandlers(io, socket) {
       if (driverRows.length === 0) return;
       const { terminal_id: terminalId, vehicle_id: vehicleId } = driverRows[0];
 
+      // ---------- 2. Previous status ----------
       const [statusRows] = await db.promise().query(
         `SELECT status FROM driverauth WHERE driver_id = ?`,
         [driverId]
       );
       const previousStatus = statusRows[0]?.status || "INACTIVE";
 
+      // ---------- 3. Geofence ----------
       const matchedZone = await findZoneContainingPoint(terminalId, latitude, longitude);
       const insideZone  = matchedZone !== null;
       const newStatus   = insideZone ? "ACTIVE" : "INACTIVE";
@@ -59,9 +62,6 @@ export function registerDriverHandlers(io, socket) {
         }
 
         // ---- Resolve bounds_id ----
-        // Priority:
-        //   1. Use the app-provided value if present
-        //   2. Fall back to looking up the route via the driver's terminal assignment
         let resolvedBoundsId = boundsId;
 
         if (!resolvedBoundsId) {
@@ -86,18 +86,32 @@ export function registerDriverHandlers(io, socket) {
           });
         }
 
-        // Skip if already WAITING
-        const [waitingRows] = await db.promise().query(
+        // Skip if already WAITING or QUEUED
+        const [existingRows] = await db.promise().query(
           `SELECT queue_id FROM vehicle_queue
-            WHERE driver_info_id = ? AND queue_status = 'WAITING' LIMIT 1`,
+            WHERE driver_info_id = ?
+              AND queue_status IN ('WAITING', 'QUEUED')
+            LIMIT 1`,
           [driverId]
         );
-        if (waitingRows.length > 0) return;
+        if (existingRows.length > 0) return;
 
-        // Compute slot
+        // ---- Decide starting status: WAITING if group is empty, else QUEUED ----
+        const [waitingCount] = await db.promise().query(
+          `SELECT COUNT(*) AS n
+             FROM vehicle_queue
+            WHERE queue_status = 'WAITING'
+              AND zone_id = ?
+              AND bounds_id = ?`,
+          [matchedZone.zone_id, resolvedBoundsId]
+        );
+        const startingStatus = waitingCount[0].n === 0 ? 'WAITING' : 'QUEUED';
+
+        // ---- Compute slot ----
         const [schedRows] = await db.promise().query(
           `SELECT MAX(scheduled_dispatch_at) AS latest
-             FROM vehicle_queue WHERE queue_status = 'WAITING'`
+             FROM vehicle_queue
+            WHERE queue_status IN ('WAITING', 'QUEUED')`
         );
         const latest = schedRows[0]?.latest;
         const baseTime = latest ? new Date(latest) : new Date();
@@ -107,15 +121,16 @@ export function registerDriverHandlers(io, socket) {
         const scheduledStr = scheduledDispatchAt
           .toISOString().slice(0, 19).replace("T", " ");
 
+        // ---- Insert ----
         const [result] = await db.promise().query(
           `INSERT INTO vehicle_queue
              (driver_info_id, vehicle_id, bounds_id, queue_status,
               joined_at, scheduled_dispatch_at,
               joined_latitude, joined_longitude,
               is_within_geofence, zone_id)
-           VALUES (?, ?, ?, 'WAITING', NOW(), ?, ?, ?, 1, ?)`,
-          [driverId, vehicleId, resolvedBoundsId, scheduledStr,
-           latitude, longitude, matchedZone.zone_id]
+           VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, 1, ?)`,
+          [driverId, vehicleId, resolvedBoundsId, startingStatus,
+           scheduledStr, latitude, longitude, matchedZone.zone_id]
         );
 
         const entry = {
@@ -124,130 +139,149 @@ export function registerDriverHandlers(io, socket) {
           boundsId: resolvedBoundsId,
           zone_id: matchedZone.zone_id,
           zone_name: matchedZone.zone_name,
+          queue_status: startingStatus,
           joined_at: Date.now(),
           scheduled_dispatch_at: scheduledStr,
         };
+        console.log(`[queue] driver ${driverId} joined as ${startingStatus}`);
         io.to("admins").emit("queue:driver_joined", entry);
         socket.emit("queue:joined", entry);
       }
 
       // ==================================================
-      // LEAVE: auto-dispatch only if driver is at FRONT of line
+      // LEAVE: auto-dispatch only if driver is WAITING
       // ==================================================
       if (justLeft && vehicleId) {
 
         const [qRows] = await db.promise().query(
-          `SELECT
-             q.queue_id,
-             q.bounds_id,
-             q.vehicle_id,
-             q.zone_id,
-             q.scheduled_dispatch_at,
-             (SELECT COUNT(*) FROM vehicle_queue q2
-                WHERE q2.queue_status = 'WAITING'
-                  AND q2.queue_id <> q.queue_id
-                  AND (
-                       q2.scheduled_dispatch_at < q.scheduled_dispatch_at
-                    OR (q2.scheduled_dispatch_at = q.scheduled_dispatch_at
-                        AND q2.joined_at < q.joined_at)
-                  )
-             ) AS ahead
-           FROM vehicle_queue q
-           WHERE q.driver_info_id = ? AND q.queue_status = 'WAITING'
-           LIMIT 1`,
+          `SELECT queue_id, bounds_id, vehicle_id, zone_id, scheduled_dispatch_at
+             FROM vehicle_queue
+            WHERE driver_info_id = ?
+              AND queue_status = 'WAITING'
+            LIMIT 1`,
           [driverId]
         );
 
         if (qRows.length > 0) {
           const q = qRows[0];
 
-          if (q.ahead > 0) {
-            console.log(`[queue] driver ${driverId} left but is #${q.ahead + 1} — no auto-dispatch`);
-          } else {
-            if (pendingDepartureTimers.has(driverId)) {
-              clearTimeout(pendingDepartureTimers.get(driverId));
-            }
-
-            const timer = setTimeout(async () => {
-              try {
-                const [checkRows] = await db.promise().query(
-                  `SELECT status FROM driverauth WHERE driver_id = ?`,
-                  [driverId]
-                );
-                if (checkRows[0]?.status === "ACTIVE") {
-                  console.log(`[queue] driver ${driverId} returned — aborting dispatch`);
-                  pendingDepartureTimers.delete(driverId);
-                  return;
-                }
-
-                const [stillWaiting] = await db.promise().query(
-                  `SELECT queue_id, bounds_id, vehicle_id, zone_id
-                     FROM vehicle_queue
-                    WHERE queue_id = ? AND queue_status = 'WAITING'`,
-                  [q.queue_id]
-                );
-                if (stillWaiting.length === 0) {
-                  pendingDepartureTimers.delete(driverId);
-                  return;
-                }
-
-                const [aheadRows] = await db.promise().query(
-                  `SELECT COUNT(*) AS ahead FROM vehicle_queue
-                    WHERE queue_status = 'WAITING'
-                      AND queue_id <> ?
-                      AND scheduled_dispatch_at < ?`,
-                  [q.queue_id, q.scheduled_dispatch_at]
-                );
-                if (aheadRows[0].ahead > 0) {
-                  console.log(`[queue] driver ${driverId} no longer #1 — aborting`);
-                  pendingDepartureTimers.delete(driverId);
-                  return;
-                }
-
-                await db.promise().query(
-                  `UPDATE vehicle_queue
-                      SET queue_status = 'DISPATCHED', served_at = NOW()
-                    WHERE queue_id = ?`,
-                  [q.queue_id]
-                );
-
-                const [logResult] = await db.promise().query(
-                  `INSERT INTO departure_logs
-                     (queue_id, driver_info_id, vehicle_id, bounds_id,
-                      departure_time, approved_by, approval_type,
-                      remarks, created_at, zone_id)
-                   VALUES (?, ?, ?, ?, NOW(), NULL, 'AUTO', NULL, NOW(), ?)`,
-                  [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
-                );
-
-                console.log(`[queue] auto-dispatched driver ${driverId}, log ${logResult.insertId}`);
-
-                io.to("admins").emit("queue:driver_dispatched", {
-                  queue_id: q.queue_id,
-                  driver_info_id: driverId,
-                  departure_id: logResult.insertId,
-                });
-
-                socket.emit("trip:started", {
-                  departure_id: logResult.insertId,
-                  queue_id: q.queue_id,
-                  bounds_id: q.bounds_id,
-                  departed_at: Date.now(),
-                });
-
-                pendingDepartureTimers.delete(driverId);
-              } catch (err) {
-                console.error("[queue] departure timer failed:", err);
-                pendingDepartureTimers.delete(driverId);
-              }
-            }, DEPARTURE_GRACE_SECONDS * 1000);
-
-            pendingDepartureTimers.set(driverId, timer);
-            console.log(`[queue] driver ${driverId} (#1) left — dispatching in ${DEPARTURE_GRACE_SECONDS}s`);
+          if (pendingDepartureTimers.has(driverId)) {
+            clearTimeout(pendingDepartureTimers.get(driverId));
           }
+
+          const timer = setTimeout(async () => {
+            const conn = await db.promise().getConnection();
+            await conn.beginTransaction();
+
+            try {
+              // Re-check: still outside?
+              const [checkRows] = await conn.query(
+                `SELECT status FROM driverauth WHERE driver_id = ?`,
+                [driverId]
+              );
+              if (checkRows[0]?.status === "ACTIVE") {
+                console.log(`[queue] driver ${driverId} returned — aborting dispatch`);
+                await conn.rollback();
+                conn.release();
+                pendingDepartureTimers.delete(driverId);
+                return;
+              }
+
+              // Still WAITING?
+              const [stillWaiting] = await conn.query(
+                `SELECT queue_id, bounds_id, vehicle_id, zone_id
+                   FROM vehicle_queue
+                  WHERE queue_id = ? AND queue_status = 'WAITING'
+                  FOR UPDATE`,
+                [q.queue_id]
+              );
+              if (stillWaiting.length === 0) {
+                await conn.rollback();
+                conn.release();
+                pendingDepartureTimers.delete(driverId);
+                return;
+              }
+
+              // 1. Mark as DISPATCHED
+              await conn.query(
+                `UPDATE vehicle_queue
+                    SET queue_status = 'DISPATCHED', served_at = NOW()
+                  WHERE queue_id = ?`,
+                [q.queue_id]
+              );
+
+              // 2. Write departure log
+              const [logResult] = await conn.query(
+                `INSERT INTO departure_logs
+                   (queue_id, driver_info_id, vehicle_id, bounds_id,
+                    departure_time, approved_by, approval_type,
+                    remarks, created_at, zone_id)
+                 VALUES (?, ?, ?, ?, NOW(), NULL, 'AUTO', NULL, NOW(), ?)`,
+                [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
+              );
+
+              // 3. Promote the next QUEUED to WAITING
+              const [nextInLine] = await conn.query(
+                `SELECT queue_id FROM vehicle_queue
+                  WHERE queue_status = 'QUEUED'
+                    AND zone_id = ?
+                    AND bounds_id = ?
+                  ORDER BY scheduled_dispatch_at ASC, joined_at ASC
+                  LIMIT 1`,
+                [q.zone_id, q.bounds_id]
+              );
+
+              let promotedId = null;
+              if (nextInLine.length > 0) {
+                await conn.query(
+                  `UPDATE vehicle_queue
+                      SET queue_status = 'WAITING'
+                    WHERE queue_id = ?`,
+                  [nextInLine[0].queue_id]
+                );
+                promotedId = nextInLine[0].queue_id;
+              }
+
+              await conn.commit();
+              conn.release();
+
+              console.log(`[queue] auto-dispatched driver ${driverId}, log ${logResult.insertId}`);
+              if (promotedId) {
+                console.log(`[queue] promoted queue ${promotedId} to WAITING`);
+              }
+
+              io.to("admins").emit("queue:driver_dispatched", {
+                queue_id: q.queue_id,
+                driver_info_id: driverId,
+                departure_id: logResult.insertId,
+                promoted_queue_id: promotedId,
+              });
+
+              socket.emit("trip:started", {
+                departure_id: logResult.insertId,
+                queue_id: q.queue_id,
+                bounds_id: q.bounds_id,
+                departed_at: Date.now(),
+              });
+
+              pendingDepartureTimers.delete(driverId);
+            } catch (err) {
+              await conn.rollback();
+              conn.release();
+              console.error("[queue] departure transaction failed:", err);
+              pendingDepartureTimers.delete(driverId);
+            }
+          }, DEPARTURE_GRACE_SECONDS * 1000);
+
+          pendingDepartureTimers.set(driverId, timer);
+          console.log(`[queue] driver ${driverId} (#1) left — dispatching in ${DEPARTURE_GRACE_SECONDS}s`);
+        } else {
+          // Driver leaving but not WAITING — could be QUEUED, just log
+          console.log(`[queue] driver ${driverId} left but was not WAITING — no dispatch`);
         }
       }
 
+      // Broadcast location to admins
       io.to("admins").emit("driver:location", {
         driverId, latitude, longitude,
         status: newStatus,

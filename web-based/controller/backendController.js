@@ -1813,7 +1813,7 @@ exports.getQueueByZone = async (req, res) => {
        LEFT JOIN terminal_bounds b ON q.bounds_id   = b.bounds_id
        LEFT JOIN terminal_locations tf ON b.from_terminal_id = tf.terminal_id
        LEFT JOIN terminal_locations tt ON b.to_terminal_id   = tt.terminal_id
-       WHERE q.queue_status = 'WAITING'
+       WHERE q.queue_status IN ('WAITING', 'QUEUED')
          AND (? IS NULL OR q.zone_id = ?)
        ORDER BY q.joined_at ASC`,
       [zone_id || null, zone_id || null]
