@@ -175,7 +175,10 @@ exports.logout = async (req, res) => {
   }
 };
 
-// admin profile picture update
+// ============================================
+// POST /update-profile-picture
+// Uploads/replaces ONLY the admin's avatar
+// ============================================
 exports.uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
@@ -204,7 +207,7 @@ exports.uploadProfilePicture = async (req, res) => {
       [newImageUrl, adminId]
     );
 
-    // Clean up previous uploaded file (not remote/placeholder URLs)
+    // Delete previous uploaded file (not remote/placeholder URLs)
     if (oldImage && oldImage.startsWith("/uploads/profiles/")) {
       const oldPath = path.join(
         __dirname, "..", "public",
@@ -233,7 +236,10 @@ exports.uploadProfilePicture = async (req, res) => {
   }
 };
 
-// Admin profile mnger
+// ============================================
+// POST /update-profile
+// Updates ONLY the text fields (name + contact)
+// ============================================
 exports.updateAdminProfile = async (req, res) => {
   try {
     const adminId = req.session?.adminAuth?.admin_id;
@@ -243,7 +249,7 @@ exports.updateAdminProfile = async (req, res) => {
 
     // ---- 1. Load current values ----
     const [rows] = await dbPool.promise().query(
-      `SELECT first_name, middle_name, last_name, contact_number, admin_profile
+      `SELECT first_name, middle_name, last_name, contact_number
          FROM admin_info WHERE admin_id = ?`,
       [adminId]
     );
@@ -252,7 +258,7 @@ exports.updateAdminProfile = async (req, res) => {
     }
     const current = rows[0];
 
-    // ---- 2. Handle text fields (fall back to existing value) ----
+    // ---- 2. Fall back to existing values if not provided ----
     const {
       first_name     = current.first_name,
       middle_name    = current.middle_name,
@@ -260,71 +266,52 @@ exports.updateAdminProfile = async (req, res) => {
       contact_number = current.contact_number,
     } = req.body;
 
-    if (!first_name?.trim() || !last_name?.trim()) {
+    // ---- 3. Validate only if a value was sent (not undefined) ----
+    if (first_name !== undefined && !String(first_name).trim()) {
       return res.status(400).json({
         success: false,
-        message: "First name and last name are required.",
+        message: "First name cannot be empty.",
       });
     }
 
-    // ---- 3. Handle optional image ----
-    let newImageUrl = current.admin_profile;
-    let deleteOldImage = false;
-
-    if (req.file) {
-      newImageUrl = `/uploads/profiles/${req.file.filename}`;
-      deleteOldImage = true;
+    if (last_name !== undefined && !String(last_name).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Last name cannot be empty.",
+      });
     }
 
-    // ---- 4. Update DB ----
+    // ---- 4. Update DB (text only — image handled by its own endpoint) ----
     await dbPool.promise().query(
       `UPDATE admin_info
           SET first_name     = ?,
               middle_name    = ?,
               last_name      = ?,
-              contact_number = ?,
-              admin_profile  = ?
+              contact_number = ?
         WHERE admin_id = ?`,
       [
-        first_name.trim(),
+        String(first_name).trim(),
         middle_name || null,
-        last_name.trim(),
+        String(last_name).trim(),
         contact_number || null,
-        newImageUrl,
         adminId,
       ]
     );
 
-    // ---- 5. Delete old image if a new one replaced it ----
-    if (
-      deleteOldImage &&
-      current.admin_profile &&
-      current.admin_profile.startsWith("/uploads/profiles/")
-    ) {
-      const oldPath = path.join(
-        __dirname, "..", "public",
-        current.admin_profile.replace(/^\/+/, "")
-      );
-      if (fs.existsSync(oldPath)) {
-        try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
-      }
-    }
-
-    // ---- 6. Sync session ----
-    req.session.adminAuth.first_name     = first_name.trim();
-    req.session.adminAuth.last_name      = last_name.trim();
+    // ---- 5. Sync session ----
+    req.session.adminAuth.first_name     = String(first_name).trim();
+    req.session.adminAuth.middle_name    = middle_name || null;
+    req.session.adminAuth.last_name      = String(last_name).trim();
     req.session.adminAuth.contact_number = contact_number || null;
-    req.session.adminAuth.admin_profile  = newImageUrl;
 
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully.",
       profile: {
-        first_name:     first_name.trim(),
+        first_name:     String(first_name).trim(),
         middle_name:    middle_name || null,
-        last_name:      last_name.trim(),
+        last_name:      String(last_name).trim(),
         contact_number: contact_number || null,
-        admin_profile:  newImageUrl,
       },
     });
 
@@ -337,6 +324,7 @@ exports.updateAdminProfile = async (req, res) => {
     });
   }
 };
+
 
 // {--- DASHBOARD TERMINAL MANAGEMENT BACKEND AREA ---}
 

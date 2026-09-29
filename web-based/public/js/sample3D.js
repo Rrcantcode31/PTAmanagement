@@ -17,6 +17,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const SOCKET_URL = 'http://192.168.1.74:4570';
 
+  // Koronadal City is the hub — never offered as a zone assignment target
+  const HUB_TERMINAL_ID = 1;
+
+  // Every new zone is a queue area
+  const DEFAULT_ZONE_TYPE = 'queue';
+
   // ==================================================
   // STATE
   // ==================================================
@@ -25,8 +31,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let selectedZoneName = null;
   let activeTool       = null;
 
-  let terminalsCache   = null;   // cached list of terminals
-  let pendingGeometry  = null;   // GeoJSON geometry waiting for modal submit
+  let terminalsCache   = null;
 
   // ==================================================
   // MODAL SYSTEM — INJECTED AT STARTUP
@@ -78,17 +83,14 @@ document.addEventListener('DOMContentLoaded', function () {
   function closeModal() {
     modalEl.classList.remove('is-open');
     modalEl.setAttribute('aria-hidden', 'true');
-    // Small delay so the close animation can finish before clearing content
     setTimeout(function () {
       modalBody.innerHTML = '';
       modalFooter.innerHTML = '';
     }, 220);
   }
 
-  // Backdrop / close button click
   modalEl.addEventListener('click', function (e) {
     if (e.target.dataset && e.target.dataset.close === '1') {
-      // Signal cancel to whatever is listening
       if (typeof modalEl._cancelHandler === 'function') {
         modalEl._cancelHandler();
       }
@@ -121,12 +123,18 @@ document.addEventListener('DOMContentLoaded', function () {
   function openCreateZoneModal(geometry) {
     return new Promise(async (resolve) => {
 
-      const terminals = await loadTerminals();
+      const allTerminals = await loadTerminals();
+
+      // Filter out the hub — Koronadal City is where all routes originate
+      // FROM, not a destination that needs its own dispatch zone
+      const assignableTerminals = allTerminals.filter(function (t) {
+        return Number(t.terminal_id) !== HUB_TERMINAL_ID;
+    });
 
       // Header
-      modalTitle.textContent = 'Create Dispatch Zone';
+      modalTitle.textContent = 'Create Queue Zone';
 
-      // Body
+      // Body — name + terminal only (zone_type is implicit)
       modalBody.innerHTML = `
         <div class="zone-modal-field">
           <label for="zmName">Zone Name</label>
@@ -142,25 +150,19 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
 
         <div class="zone-modal-field">
-          <label>Zone Type</label>
-          <div class="zone-type-pills" id="zmTypePills">
-            <button type="button" class="zone-type-pill" data-value="loading">Loading</button>
-            <button type="button" class="zone-type-pill" data-value="waiting">Waiting</button>
-            <button type="button" class="zone-type-pill" data-value="queue">Queue</button>
-            <button type="button" class="zone-type-pill" data-value="dispatch">Dispatch</button>
-          </div>
-          <span class="zone-modal-error" id="zmTypeError"></span>
-        </div>
-
-        <div class="zone-modal-field">
           <label for="zmTerminal">Assign to Terminal</label>
           <select id="zmTerminal" class="zone-modal-select">
             <option value="">— Select a terminal —</option>
-            ${terminals.map(t => `
+            ${assignableTerminals.map(t => `
               <option value="${t.terminal_id}">${t.terminal_name}</option>
             `).join('')}
           </select>
           <span class="zone-modal-error" id="zmTerminalError"></span>
+        </div>
+
+        <div class="zone-modal-hint">
+          <i class="fas fa-info-circle"></i>
+          All zones are treated as <strong>queue areas</strong>.
         </div>
       `;
 
@@ -173,18 +175,6 @@ document.addEventListener('DOMContentLoaded', function () {
           Create Zone
         </button>
       `;
-
-      // Zone type pill selection
-      let selectedType = '';
-      const pills = modalBody.querySelectorAll('.zone-type-pill');
-      pills.forEach(function (pill) {
-        pill.addEventListener('click', function () {
-          pills.forEach(p => p.classList.remove('is-selected'));
-          pill.classList.add('is-selected');
-          selectedType = pill.dataset.value;
-          document.getElementById('zmTypeError').textContent = '';
-        });
-      });
 
       // Cancel handler
       function doCancel() {
@@ -213,12 +203,6 @@ document.addEventListener('DOMContentLoaded', function () {
           document.getElementById('zmName').classList.remove('has-error');
         }
 
-        // Validate type
-        if (!selectedType) {
-          document.getElementById('zmTypeError').textContent = 'Please choose a zone type';
-          hasError = true;
-        }
-
         // Validate terminal
         if (!term) {
           document.getElementById('zmTerminalError').textContent = 'Please select a terminal';
@@ -234,8 +218,8 @@ document.addEventListener('DOMContentLoaded', function () {
         modalEl._cancelHandler = null;
         closeModal();
         resolve({
-          zone_name: name,
-          zone_type: selectedType,
+          zone_name:   name,
+          zone_type:   DEFAULT_ZONE_TYPE,   // always 'queue'
           terminal_id: Number(term)
         });
       });
@@ -251,7 +235,6 @@ document.addEventListener('DOMContentLoaded', function () {
       };
       modalEl.addEventListener('keydown', keyHandler);
 
-      // Clean up key listener when modal closes
       const closeWatcher = setInterval(function () {
         if (!modalEl.classList.contains('is-open')) {
           modalEl.removeEventListener('keydown', keyHandler);
@@ -261,7 +244,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
       openModal();
 
-      // Autofocus the name field
       setTimeout(function () {
         document.getElementById('zmName')?.focus();
       }, 250);
@@ -923,11 +905,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const geoJson = layer.toGeoJSON();
 
-    // Show modal — resolves with { zone_name, zone_type, terminal_id } or null
     const formData = await openCreateZoneModal(geoJson.geometry);
 
     if (!formData) {
-      // User cancelled
       map.removeLayer(layer);
       clearActiveTool();
       return;

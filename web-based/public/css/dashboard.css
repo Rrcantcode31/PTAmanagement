@@ -364,24 +364,21 @@
         gap: 20px;
     }
 
-    .admin-info {
-        text-align: right;
-    }
+   .admin-info {
+    text-align: right;
+}
 
-    .admin-info span {
-        display: block;
-        font-size: 18px;
-        color: #555;
-        margin-bottom: 5px;
-    }
+.admin-info strong {
+    display: block;
+    color: #319086;
+    font-size: 14px;
+    font-weight: 600;
+}
 
-    .admin-info a {
-        text-decoration: none;
-        color: #319086;
-        padding: 6px 12px;
-        border-radius: 5px;
-        font-size: 18px;
-    }
+.admin-info span {
+    font-size: 13px;
+    color: #555;
+}
 
         .stats-section {
         display: grid;
