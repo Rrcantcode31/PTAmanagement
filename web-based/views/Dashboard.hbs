@@ -176,9 +176,6 @@
                 <button id="toggle-edit-btn" type="button" class="drawer-btn edit-toggle-btn">
                     <i class="fas fa-pen"></i> Edit Profile
                 </button>
-                <a href="/Logout" class="drawer-btn logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
             </div>
         </div>
 
@@ -213,11 +210,11 @@
                 </div>
             </div>
 
-            <form id="profile-edit-mode" class="profile-mode-section hidden" onsubmit="return false;">
+            <div id="profile-edit-mode" class="profile-mode-section hidden">
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="profile-first-name"><i class="fas fa-user"></i> First Name</label>
-                        <input id="profile-first-name" type="text" value="{{adminAuth.first_name}}" required />
+                        <input id="profile-first-name" type="text" value="{{adminAuth.first_name}}" />
                     </div>
                     <div class="form-group">
                         <label for="profile-middle-name"><i class="fas fa-user"></i> Middle Name</label>
@@ -225,7 +222,7 @@
                     </div>
                     <div class="form-group">
                         <label for="profile-last-name"><i class="fas fa-user"></i> Last Name</label>
-                        <input id="profile-last-name" type="text" value="{{adminAuth.last_name}}" required />
+                        <input id="profile-last-name" type="text" value="{{adminAuth.last_name}}" />
                     </div>
                     <div class="form-group">
                         <label><i class="fas fa-envelope"></i> Email (Read-only)</label>
@@ -240,20 +237,41 @@
                         <input type="text" value="{{adminAuth.role}}" disabled class="disabled-input" />
                     </div>
                 </div>
-
-                <div class="form-actions">
-                    <button id="save-profile-btn" type="button" class="save-btn">
-                        <i class="fas fa-save"></i> Save Changes
-                    </button>
-                    <button id="cancel-edit-btn" type="button" class="cancel-btn">
-                        Cancel
-                    </button>
-                </div>
-            </form>
+                <!-- No buttons here — they live in the footer -->
+            </div>
 
         </div>
 
     </div>
+
+    <!-- Footer: Logout on left, Cancel + Save on right -->
+    <div class="drawer-footer">
+
+        <a href="/Logout" class="drawer-logout-btn">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+
+        <div class="drawer-footer-actions">
+            <button
+                type="button"
+                id="cancel-profile-btn"
+                class="drawer-cancel-btn"
+            >
+                Cancel
+            </button>
+
+            <button
+                type="button"
+                id="save-profile-btn"
+                class="drawer-save-btn"
+                disabled
+            >
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+        </div>
+
+    </div>
+
 </aside>
 
 </body>

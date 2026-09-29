@@ -175,10 +175,7 @@ exports.logout = async (req, res) => {
   }
 };
 
-// ============================================
-// POST /update-profile-picture
 // Uploads/replaces ONLY the admin's avatar
-// ============================================
 exports.uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
@@ -236,10 +233,7 @@ exports.uploadProfilePicture = async (req, res) => {
   }
 };
 
-// ============================================
 // POST /update-profile
-// Updates ONLY the text fields (name + contact)
-// ============================================
 exports.updateAdminProfile = async (req, res) => {
   try {
     const adminId = req.session?.adminAuth?.admin_id;

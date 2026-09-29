@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const updateBtn = document.querySelector('.update-btn');
   const deleteBtn = document.querySelector('.delete-btn');
 
-  // Validation / confirmation modal elements
   const validationModal = document.getElementById("validation-modal");
   const validationIcon = document.getElementById("validation-icon");
   const validationTitle = document.getElementById("validation-title");
@@ -54,7 +53,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     cancelText = "Cancel",
     showCancel = true
   }) {
-
     validationModal.className = `validation-modal ${type}`;
     validationModal.classList.remove("hidden");
 
@@ -64,15 +62,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     validationCancel.textContent = cancelText;
     validationCancel.style.display = showCancel ? "inline-block" : "none";
 
-    if (type === "delete") {
-      validationIcon.textContent = "🗑️";
-    } else if (type === "success") {
-      validationIcon.textContent = "✓";
-    } else if (type === "error") {
-      validationIcon.textContent = "✕";
-    } else {
-      validationIcon.textContent = "⚠️";
-    }
+    if (type === "delete") validationIcon.textContent = "🗑️";
+    else if (type === "success") validationIcon.textContent = "✓";
+    else if (type === "error") validationIcon.textContent = "✕";
+    else validationIcon.textContent = "⚠️";
 
     return new Promise((resolve) => {
       validationResolve = resolve;
@@ -87,19 +80,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  validationConfirm.addEventListener("click", () => {
-    closeValidationModal(true);
-  });
-
-  validationCancel.addEventListener("click", () => {
-    closeValidationModal(false);
-  });
-
+  validationConfirm.addEventListener("click", () => closeValidationModal(true));
+  validationCancel.addEventListener("click", () => closeValidationModal(false));
   validationModal
     .querySelector(".validation-modal-overlay")
-    .addEventListener("click", () => {
-      closeValidationModal(false);
-    });
+    .addEventListener("click", () => closeValidationModal(false));
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !validationModal.classList.contains("hidden")) {
@@ -110,7 +95,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================================
   // MAP SETUP
   // ==========================================================
-
   const southCotabatoBounds = L.latLngBounds([[5.95, 124.55], [6.65, 125.2]]);
   const map = L.map('map', {
     maxBounds: southCotabatoBounds,
@@ -124,7 +108,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Full pin icon (used for the highlighted terminal, e.g. Koronadal City)
   const terminalIcon = L.icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
     shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -134,7 +117,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     shadowSize: [41, 41]
   });
 
-  // Simple dot icon (used for all other terminals)
   const dotIcon = L.divIcon({
     className: 'terminal-dot-icon',
     iconSize: [14, 14],
@@ -144,18 +126,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     </svg>`
   });
 
-  // Name of the terminal that should keep the full pin marker.
-  // Change this constant if you want a different terminal highlighted.
+  // NEW: gold pin used during Update mode — the draggable ghost pin
+  const ghostPinIcon = L.icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [30, 48],
+    iconAnchor: [15, 48],
+    popupAnchor: [1, -40],
+    shadowSize: [48, 48]
+  });
+
   const HIGHLIGHTED_TERMINAL = 'Koronadal City';
 
-  // Helper: pick the right icon based on terminal name (case/whitespace-insensitive)
   const getIconFor = (name) =>
     (name || '').trim().toLowerCase() === HIGHLIGHTED_TERMINAL.toLowerCase()
       ? terminalIcon
       : dotIcon;
 
-  // Helper: only show a permanent label for the highlighted terminal.
-  // Set this to `true` if you want ALL markers (dots included) to show labels.
   const SHOW_LABEL_FOR_ALL = false;
 
   const maybeBindTooltip = (marker, name) => {
@@ -173,10 +160,68 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================================
   // MODES
   // ==========================================================
-
   let addMode = false;
   let updateMode = false;
   let deleteMode = false;
+
+  // NEW: ghost pin state
+  let ghostPin = null;
+  let sourceMarker = null;
+  let sourceOriginalLatLng = null;
+
+  // NEW: helper — remove ghost pin (with optional revert of nothing since
+  // the source marker never moved during the drag — it stays put)
+  function removeGhostPin() {
+    if (ghostPin) {
+      map.removeLayer(ghostPin);
+      ghostPin = null;
+    }
+    sourceMarker = null;
+    sourceOriginalLatLng = null;
+  }
+
+  // NEW: helper — spawn ghost pin at a marker's position
+  function spawnGhostPin(marker) {
+    removeGhostPin();
+
+    const start = marker.getLatLng();
+    sourceMarker = marker;
+    sourceOriginalLatLng = L.latLng(start.lat, start.lng);
+
+    ghostPin = L.marker([start.lat, start.lng], {
+      icon: ghostPinIcon,
+      draggable: true,
+      zIndexOffset: 1000,
+      opacity: 0.95
+    }).addTo(map);
+
+    ghostPin.bindTooltip('Drag to move terminal', {
+      direction: 'top',
+      offset: [0, -46]
+    });
+
+    const syncCoords = (e) => {
+      const ll = e.target.getLatLng();
+      modalLat.textContent = ll.lat.toFixed(6);
+      modalLng.textContent = ll.lng.toFixed(6);
+    };
+
+    ghostPin.on('drag', syncCoords);
+    ghostPin.on('dragend', syncCoords);
+  }
+
+  // NEW: helper — open update modal with the ghost pin
+  function openUpdateModal(marker) {
+    spawnGhostPin(marker);
+
+    const ll = marker.getLatLng();
+    showModal({
+      lat: ll.lat.toFixed(6),
+      lng: ll.lng.toFixed(6),
+      name: marker.terminal_name || '',
+      address: marker.terminal_address || ''
+    });
+  }
 
   const resetModes = () => {
     addMode = updateMode = deleteMode = false;
@@ -186,9 +231,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     deleteBtn.classList.remove('active');
 
     map.dragging.enable();
+
+    // NEW: drop the ghost pin whenever modes reset
+    removeGhostPin();
   };
 
-  // Pending action state (so Save knows what to POST/PATCH)
   const pending = {
     addLat: null,
     addLng: null,
@@ -214,22 +261,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     pending.updateMarker = null;
   };
 
-  // Close modal (cancel current pending data, keep mode as-is)
   modalCloseBtn.addEventListener('click', () => {
     hideModal();
     clearPending();
-    resetModes(); // <- important: turns off add/update/delete modes
+    removeGhostPin();     // NEW
+    resetModes();
   });
 
   // Add Mode
   addBtn.addEventListener('click', () => {
-    if (addMode) { // toggle off
+    if (addMode) {
       resetModes();
       hideModal();
       clearPending();
       return;
     }
-
     resetModes();
     addMode = true;
     addBtn.classList.add('active');
@@ -238,12 +284,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Update Mode
   updateBtn.addEventListener('click', () => {
-    if (updateMode) { // toggle off
+    if (updateMode) {
       resetModes();
       hideModal();
       return;
     }
-
     resetModes();
     updateMode = true;
     updateBtn.classList.add('active');
@@ -251,78 +296,73 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Delete Mode
   deleteBtn.addEventListener('click', () => {
-    if (deleteMode) { // toggle off
+    if (deleteMode) {
       resetModes();
       hideModal();
       return;
     }
-
     resetModes();
     deleteMode = true;
     deleteBtn.classList.add('active');
   });
 
   // ==========================================================
-  // DELETE HELPER — shared by both marker click handlers below
+  // DELETE HELPER
   // ==========================================================
-
   async function handleDeleteMarker(marker) {
-  const confirmed = await showValidationModal({
-    type: "delete",
-    title: "Delete Terminal?",
-    message: `Permanently delete <span class="highlight-value">${marker.terminal_name || 'this terminal'}</span>?` +
-    ` This cannot be undone.`,
-    confirmText: "Delete",
-    cancelText: "Cancel",
-    showCancel: true
-  });
-
-  if (!confirmed) return;
-
-  try {
-    const delRes = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' }
+    const confirmed = await showValidationModal({
+      type: "delete",
+      title: "Delete Terminal?",
+      message: `Permanently delete <span class="highlight-value">${marker.terminal_name || 'this terminal'}</span>? This cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      showCancel: true
     });
-    const delResult = await delRes.json();
 
-    if (delResult.error) {
+    if (!confirmed) return;
+
+    try {
+      const delRes = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const delResult = await delRes.json();
+
+      if (delResult.error) {
+        await showValidationModal({
+          type: "error",
+          title: "Delete Failed",
+          message: delResult.error,
+          confirmText: "OK",
+          showCancel: false
+        });
+        return;
+      }
+
+      map.removeLayer(marker);
+
       await showValidationModal({
-        type: "error",
-        title: "Delete Failed",
-        message: delResult.error,
+        type: "success",
+        title: "Terminal Deleted",
+        message: "The terminal was removed successfully.",
         confirmText: "OK",
         showCancel: false
       });
-      return;
+    } catch (err) {
+      console.error(err);
+      await showValidationModal({
+        type: "error",
+        title: "Delete Failed",
+        message: "Something went wrong while deleting this terminal.",
+        confirmText: "OK",
+        showCancel: false
+      });
     }
-
-    map.removeLayer(marker);
-
-    await showValidationModal({
-      type: "success",
-      title: "Terminal Deleted",
-      message: "The terminal was removed successfully.",
-      confirmText: "OK",
-      showCancel: false
-    });
-
-  } catch (err) {
-    console.error(err);
-    await showValidationModal({
-      type: "error",
-      title: "Delete Failed",
-      message: "Something went wrong while deleting this terminal.",
-      confirmText: "OK",
-      showCancel: false
-    });
   }
-}
 
   // ==========================================================
   // FETCH TERMINALS + RENDER MARKERS
   // ==========================================================
-
   const markers = [];
 
   try {
@@ -335,9 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       marker.terminal_id = term.terminal_id;
       marker.terminal_name = term.terminal_name;
       marker.terminal_address = term.terminal_address;
-
       maybeBindTooltip(marker, term.terminal_name);
-
       markers.push(marker);
     });
   } catch (err) {
@@ -351,7 +389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Map click for Add: open modal (do NOT use prompt; let user type)
+  // Map click for Add
   map.on('click', (e) => {
     if (!addMode) return;
 
@@ -362,43 +400,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     pending.addLng = lng;
     pending.updateMarker = null;
 
-    showModal({
-      name: '',
-      address: '',
-      lat,
-      lng
-    });
+    showModal({ name: '', address: '', lat, lng });
   });
 
   // ==========================================================
-  // SAVE MODAL (handles both Add and Update)
+  // SAVE MODAL (Add + Update)
   // ==========================================================
-
   modalSaveBtn.addEventListener('click', async () => {
     const terminal_name = modalName.value.trim();
     const terminal_address = modalAddress.value.trim();
 
+    // ---------- ADD ----------
     if (addMode) {
       if (!pending.addLat || !pending.addLng) return;
 
       if (!terminal_name) {
         await showValidationModal({
-          type: "warning",
-          title: "Missing Name",
+          type: "warning", title: "Missing Name",
           message: "Terminal Name is required.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
         return;
       }
 
       if (!terminal_address) {
         await showValidationModal({
-          type: "warning",
-          title: "Missing Address",
+          type: "warning", title: "Missing Address",
           message: "Terminal Address is required.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
         return;
       }
@@ -419,11 +448,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (result.error) {
           await showValidationModal({
-            type: "error",
-            title: "Add Failed",
-            message: result.error,
-            confirmText: "OK",
-            showCancel: false
+            type: "error", title: "Add Failed", message: result.error,
+            confirmText: "OK", showCancel: false
           });
           return;
         }
@@ -437,19 +463,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         marker.on('click', async () => {
           if (updateMode) {
-            pending.updateMarker = marker;
-            pending.addLat = null;
-            pending.addLng = null;
-
-            const ll = marker.getLatLng();
-            showModal({
-              lat: ll.lat.toFixed(6),
-              lng: ll.lng.toFixed(6),
-              name: marker.terminal_name || '',
-              address: marker.terminal_address || ''
-            });
+            openUpdateModal(marker);   // NEW
+            return;
           }
-
           if (deleteMode) {
             await handleDeleteMarker(marker);
           }
@@ -462,146 +478,115 @@ document.addEventListener('DOMContentLoaded', async () => {
         resetModes();
 
         await showValidationModal({
-          type: "success",
-          title: "Terminal Added",
+          type: "success", title: "Terminal Added",
           message: "The terminal was added successfully.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
-
       } catch (err) {
         console.error(err);
         await showValidationModal({
-          type: "error",
-          title: "Add Failed",
+          type: "error", title: "Add Failed",
           message: "Failed to add terminal.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
       }
       return;
     }
 
+    // ---------- UPDATE ----------
     if (updateMode) {
-      const marker = pending.updateMarker;
-      if (!marker) return;
+      // NEW: source comes from the ghost pin, not from pending.updateMarker
+      if (!ghostPin || !sourceMarker) return;
 
       if (!terminal_name) {
         await showValidationModal({
-          type: "warning",
-          title: "Missing Name",
+          type: "warning", title: "Missing Name",
           message: "Terminal Name is required.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
         return;
       }
 
       if (!terminal_address) {
         await showValidationModal({
-          type: "warning",
-          title: "Missing Address",
+          type: "warning", title: "Missing Address",
           message: "Terminal Address is required.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
         return;
       }
 
       try {
-        const ll = marker.getLatLng();
+        // NEW: new coordinates come from the ghost pin
+        const ll = ghostPin.getLatLng();
+        const newLat = ll.lat.toFixed(6);
+        const newLng = ll.lng.toFixed(6);
 
         const response = await fetch('/UpdateTerminalLocation', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            terminal_id: marker.terminal_id,
+            terminal_id: sourceMarker.terminal_id,
             terminal_name,
             terminal_address,
-            latitude: ll.lat,
-            longitude: ll.lng
+            latitude: newLat,
+            longitude: newLng
           })
         });
 
         if (!response.ok) throw new Error("Server error");
-
         const result = await response.json();
 
         if (result.error) {
           await showValidationModal({
-            type: "error",
-            title: "Update Failed",
-            message: result.error,
-            confirmText: "OK",
-            showCancel: false
+            type: "error", title: "Update Failed", message: result.error,
+            confirmText: "OK", showCancel: false
           });
           return;
         }
 
-        marker.terminal_name = terminal_name;
-        marker.terminal_address = terminal_address;
+        // NEW: move the actual terminal marker to the new position
+        sourceMarker.setLatLng([newLat, newLng]);
+        sourceMarker.terminal_name = terminal_name;
+        sourceMarker.terminal_address = terminal_address;
+        sourceMarker.setIcon(getIconFor(terminal_name));
 
-        // Icon may need to change if the name was edited to/from the highlighted terminal
-        marker.setIcon(getIconFor(terminal_name));
-
-        // Remove any existing tooltip before re-binding, to avoid duplicates
-        if (marker.getTooltip()) {
-          marker.unbindTooltip();
-        }
-        maybeBindTooltip(marker, terminal_name);
+        if (sourceMarker.getTooltip()) sourceMarker.unbindTooltip();
+        maybeBindTooltip(sourceMarker, terminal_name);
 
         hideModal();
         clearPending();
-        resetModes();
+        resetModes();     // drops ghost pin
 
         await showValidationModal({
-          type: "success",
-          title: "Terminal Updated",
+          type: "success", title: "Terminal Updated",
           message: "The terminal was updated successfully.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
-
       } catch (err) {
         console.error(err);
         await showValidationModal({
-          type: "error",
-          title: "Update Failed",
+          type: "error", title: "Update Failed",
           message: "Failed to update terminal.",
-          confirmText: "OK",
-          showCancel: false
+          confirmText: "OK", showCancel: false
         });
       }
-
       return;
     }
 
-    // If no mode is active, just close
     resetModes();
     clearPending();
   });
 
   // ==========================================================
-  // MARKER INTERACTIONS (existing markers loaded on page load)
+  // MARKER INTERACTIONS (existing markers on page load)
   // ==========================================================
-
   markers.forEach(marker => {
     marker.on('click', async () => {
       if (updateMode) {
-        pending.updateMarker = marker;
-        pending.addLat = null;
-        pending.addLng = null;
-
-        const ll = marker.getLatLng();
-        showModal({
-          lat: ll.lat.toFixed(6),
-          lng: ll.lng.toFixed(6),
-          name: marker.terminal_name || '',
-          address: marker.terminal_address || ''
-        });
+        openUpdateModal(marker);   // NEW
         return;
       }
-
       if (deleteMode) {
         await handleDeleteMarker(marker);
       }

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const uploadProfile = require('../middleware/uploadProfile')
 const authController = require('../controller/backendController');
+
 
 
 //authencticaion
@@ -8,6 +10,9 @@ router.post('/Login', authController.Login);
 //end session
 router.get('/Logout', authController.logout);
 // admin profile mnger
+router.post('/update-profile-picture', authController.isLoggedIn, uploadProfile.single('avatar'), authController.uploadProfilePicture);
+
+// Text update (JSON)
 router.post('/update-profile', authController.isLoggedIn, authController.updateAdminProfile);
 
 //Admin protected functions
@@ -30,7 +35,7 @@ router.get('/getDispatchAreZone', authController.isLoggedIn, authController.getD
 //Admin delete function
 router.delete('/DeleteDriverInfo', authController.isLoggedIn, authController.DeleteDriverInfo);
 router.delete('/DeleteTerminalLocation/:terminal_id', authController.isLoggedIn, authController.DeleteTerminalLocation);
-router.delete('deleteFarePrice', authController.isLoggedIn, authController.deleteFarePrice);
+router.delete('/deleteFarePrice/:bounds_id', authController.isLoggedIn, authController.deleteFarePrice);
 router.delete('/deleteDispatchAreaZone/:zone_id', authController.isLoggedIn, authController.deleteDispatchZoneArea);
 
 
