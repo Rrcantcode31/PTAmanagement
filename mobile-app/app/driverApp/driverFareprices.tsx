@@ -31,6 +31,7 @@ export default function driverFarePrices() {
      const [fontsLoaded] = useFonts({
        monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
        monster_act: require("../../assets/Font/monster_act.ttf"),
+       monsterrat_font: require("../../assets/Font/monsterrat_font.ttf"),
      });
    
      useEffect(() => {
@@ -220,9 +221,10 @@ export default function driverFarePrices() {
      },
    
      noticeBrand: {
-       fontWeight: '700',
-       color: '#a67614',
-     },
+      color: '#272624',
+      fontFamily: "monsterrat_font",
+      fontSize: 10
+      },
    
      FareContainer: {
        borderRadius: 20,

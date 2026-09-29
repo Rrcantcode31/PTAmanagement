@@ -206,27 +206,14 @@
             font-size: 1.7rem;
         }
 
-        .filter-bar {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            background: #f8fafc;
-            padding: 6px 16px;
-            border-radius: 60px;
-        }
-
-        .filter-bar input {
+        .route-selector select {
+            padding: 10px 14px;
+            border-radius: 10px;
             border: none;
-            background: transparent;
-            padding: 8px 4px;
             font-family: 'Montserrat', sans-serif;
-            font-size: 14px;
+            font-weight: 600;
             outline: none;
-            width: 220px;
-        }
-
-        .filter-bar i {
-            color: #7e8b8c;
+            cursor: pointer;
         }
 
         .table-container {

@@ -4,8 +4,11 @@ import { findZoneContainingPoint } from "./helper/geofence.js";
 const SLOT_DURATION_MINUTES   = Number(process.env.SLOT_DURATION_MINUTES || 30);
 const DEPARTURE_GRACE_SECONDS = Number(process.env.DEPARTURE_GRACE_SECONDS || 60);
 
+// Koronadal City = the hub terminal that all routes originate from
+const HUB_TERMINAL_ID = Number(process.env.HUB_TERMINAL_ID || 1);
+
 // Module-level, survives socket reconnects
-const pendingDepartureTimers = new Map(); // driverId -> NodeJS.Timeout
+const pendingDepartureTimers = new Map();
 
 export function registerDriverHandlers(io, socket) {
 
@@ -13,7 +16,7 @@ export function registerDriverHandlers(io, socket) {
     driverId,
     latitude,
     longitude,
-    boundsId = null,
+    boundsId = null,          // still accepted if the app sends one
   }) => {
     try {
       if (!driverId || latitude == null || longitude == null) return;
@@ -47,6 +50,7 @@ export function registerDriverHandlers(io, socket) {
       // ENTER: auto-join the queue
       // ==================================================
       if (justEntered && vehicleId) {
+
         // Cancel any pending departure — they came back
         if (pendingDepartureTimers.has(driverId)) {
           clearTimeout(pendingDepartureTimers.get(driverId));
@@ -54,13 +58,35 @@ export function registerDriverHandlers(io, socket) {
           console.log(`[queue] cancelled pending departure for driver ${driverId}`);
         }
 
-        if (!boundsId) {
-          console.warn("[queue] missing boundsId — skipping join");
+        // ---- Resolve bounds_id ----
+        // Priority:
+        //   1. Use the app-provided value if present
+        //   2. Fall back to looking up the route via the driver's terminal assignment
+        let resolvedBoundsId = boundsId;
+
+        if (!resolvedBoundsId) {
+          if (terminalId && terminalId !== HUB_TERMINAL_ID) {
+            const [boundsRows] = await db.promise().query(
+              `SELECT bounds_id FROM terminal_bounds
+                WHERE (from_terminal_id = ? AND to_terminal_id = ?)
+                   OR (from_terminal_id = ? AND to_terminal_id = ?)
+                LIMIT 1`,
+              [terminalId, HUB_TERMINAL_ID, HUB_TERMINAL_ID, terminalId]
+            );
+            resolvedBoundsId = boundsRows[0]?.bounds_id || null;
+          }
+        }
+
+        if (!resolvedBoundsId) {
+          console.warn(
+            `[queue] no bounds_id for driver ${driverId} (terminal ${terminalId}) — skipping join`
+          );
           return socket.emit("queue:join:error", {
-            message: "Please select a route before entering the terminal.",
+            message: "No route is assigned to your terminal. Contact the dispatcher.",
           });
         }
 
+        // Skip if already WAITING
         const [waitingRows] = await db.promise().query(
           `SELECT queue_id FROM vehicle_queue
             WHERE driver_info_id = ? AND queue_status = 'WAITING' LIMIT 1`,
@@ -68,6 +94,7 @@ export function registerDriverHandlers(io, socket) {
         );
         if (waitingRows.length > 0) return;
 
+        // Compute slot
         const [schedRows] = await db.promise().query(
           `SELECT MAX(scheduled_dispatch_at) AS latest
              FROM vehicle_queue WHERE queue_status = 'WAITING'`
@@ -87,13 +114,14 @@ export function registerDriverHandlers(io, socket) {
               joined_latitude, joined_longitude,
               is_within_geofence, zone_id)
            VALUES (?, ?, ?, 'WAITING', NOW(), ?, ?, ?, 1, ?)`,
-          [driverId, vehicleId, boundsId, scheduledStr,
+          [driverId, vehicleId, resolvedBoundsId, scheduledStr,
            latitude, longitude, matchedZone.zone_id]
         );
 
         const entry = {
           queue_id: result.insertId,
-          driverId, vehicleId, boundsId,
+          driverId, vehicleId,
+          boundsId: resolvedBoundsId,
           zone_id: matchedZone.zone_id,
           zone_name: matchedZone.zone_name,
           joined_at: Date.now(),
@@ -108,7 +136,6 @@ export function registerDriverHandlers(io, socket) {
       // ==================================================
       if (justLeft && vehicleId) {
 
-        // Get this driver's WAITING entry + count how many entries are ahead
         const [qRows] = await db.promise().query(
           `SELECT
              q.queue_id,
@@ -135,17 +162,14 @@ export function registerDriverHandlers(io, socket) {
           const q = qRows[0];
 
           if (q.ahead > 0) {
-            // Not first in line — ignore. They can come back.
             console.log(`[queue] driver ${driverId} left but is #${q.ahead + 1} — no auto-dispatch`);
           } else {
-            // They ARE #1. Schedule departure after grace period.
             if (pendingDepartureTimers.has(driverId)) {
               clearTimeout(pendingDepartureTimers.get(driverId));
             }
 
             const timer = setTimeout(async () => {
               try {
-                // Re-check: still outside?
                 const [checkRows] = await db.promise().query(
                   `SELECT status FROM driverauth WHERE driver_id = ?`,
                   [driverId]
@@ -156,7 +180,6 @@ export function registerDriverHandlers(io, socket) {
                   return;
                 }
 
-                // Still WAITING?
                 const [stillWaiting] = await db.promise().query(
                   `SELECT queue_id, bounds_id, vehicle_id, zone_id
                      FROM vehicle_queue
@@ -168,7 +191,6 @@ export function registerDriverHandlers(io, socket) {
                   return;
                 }
 
-                // Re-verify still #1 (another admin/auto event could have changed it)
                 const [aheadRows] = await db.promise().query(
                   `SELECT COUNT(*) AS ahead FROM vehicle_queue
                     WHERE queue_status = 'WAITING'
@@ -182,7 +204,6 @@ export function registerDriverHandlers(io, socket) {
                   return;
                 }
 
-                // ---- Fire departure ----
                 await db.promise().query(
                   `UPDATE vehicle_queue
                       SET queue_status = 'DISPATCHED', served_at = NOW()
@@ -227,7 +248,6 @@ export function registerDriverHandlers(io, socket) {
         }
       }
 
-      // Broadcast location for the map
       io.to("admins").emit("driver:location", {
         driverId, latitude, longitude,
         status: newStatus,

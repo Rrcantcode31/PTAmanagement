@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
   },
 
   noticeBrand: {
-    fontWeight: '700',
-    color: '#a67614',
+    color: '#272624',
+    fontFamily: "monsterrat_kp"
   },
 
   FareContainer: {

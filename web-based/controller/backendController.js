@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs'); 
-const { error } = require('console');
+const { error } = require('console'); 
 const dbPool = require('../database/dbPool')
 
 //Admin Login
@@ -1419,35 +1419,45 @@ exports.postDispatchZoneArea = async (req, res) => {
     } = req.body;
 
     // ---------------------------------------------
-    // Validation
-    // ---------------------------------------------
-    if (!terminal_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Terminal is required"
-      });
-    }
+// Validation
+// ---------------------------------------------
+if (!terminal_id) {
+  return res.status(400).json({
+    success: false,
+    message: "Terminal is required"
+  });
+}
 
-    if (!zone_name || !zone_name.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Zone name is required"
-      });
-    }
+if (!zone_name || !zone_name.trim()) {
+  return res.status(400).json({
+    success: false,
+    message: "Zone name is required"
+  });
+}
 
-    if (!zone_type) {
-      return res.status(400).json({
-        success: false,
-        message: "Zone type is required"
-      });
-    }
+if (!zone_type) {
+  return res.status(400).json({
+    success: false,
+    message: "Zone type is required"
+  });
+}
 
-    if (!boundary) {
-      return res.status(400).json({
-        success: false,
-        message: "Zone boundary is required"
-      });
-    }
+// Only 'queue' and 'dispatch' are allowed — matches the DB enum
+const ALLOWED_ZONE_TYPES = ['queue', 'dispatch'];
+
+if (!ALLOWED_ZONE_TYPES.includes(zone_type.toLowerCase())) {
+  return res.status(400).json({
+    success: false,
+    message: `Invalid zone type. Must be one of: ${ALLOWED_ZONE_TYPES.join(', ')}`
+  });
+}
+
+if (!boundary) {
+  return res.status(400).json({
+    success: false,
+    message: "Zone boundary is required"
+  });
+}
 
     // ---------------------------------------------
     // Validate GeoJSON boundary
@@ -1509,12 +1519,11 @@ exports.postDispatchZoneArea = async (req, res) => {
           NOW()
         )
       `,
-      [
-        terminal_id,
-        zone_name.trim(),
-        zone_type,
-        JSON.stringify(boundaryData),
-        createdBy
+     [
+      terminal_id, zone_name.trim(), 
+      zone_type.toLowerCase(), 
+      JSON.stringify(boundaryData),
+      createdBy
       ]
     );
 
@@ -1639,6 +1648,109 @@ exports.putDispatchZoneArea = async (req, res) => {
       error: error.message
     });
 
+  }
+};
+
+// DISPATCH ZONE BACKEND — HARD DELETE
+exports.deleteDispatchZoneArea = async (req, res) => {
+  const conn = await dbPool.promise().getConnection();
+  await conn.beginTransaction();
+
+  try {
+    const { zone_id } = req.params;
+
+    if (!zone_id) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({
+        success: false,
+        message: "Zone ID is required",
+      });
+    }
+
+    // ---- 1. Confirm the zone exists ----
+    const [zones] = await conn.query(
+      `SELECT zone_id, zone_name, terminal_id
+         FROM dispatch_zones
+        WHERE zone_id = ?`,
+      [zone_id]
+    );
+
+    if (zones.length === 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(404).json({
+        success: false,
+        message: "Dispatch zone not found.",
+      });
+    }
+
+    const zone = zones[0];
+
+    // ---- 2. Delete (not cancel) WAITING queue entries ----
+    // These reference a zone that's about to disappear. Better to remove
+    // them entirely than leave orphaned/cancelled rows pointing at nothing.
+    const [waitingDel] = await conn.query(
+      `DELETE FROM vehicle_queue
+        WHERE zone_id = ?
+          AND queue_status = 'WAITING'`,
+      [zone_id]
+    );
+
+    // ---- 3. Null out zone_id on historical departure logs ----
+    // Trip records stay — we only forget which zone they departed from.
+    const [logUpdate] = await conn.query(
+      `UPDATE departure_logs
+          SET zone_id = NULL
+        WHERE zone_id = ?`,
+      [zone_id]
+    );
+
+    // ---- 4. Null out zone_id on any DISPATCHED queue rows ----
+    // Same principle — keep the vehicle_queue history, just lose the zone ref.
+    const [dispatchedUpdate] = await conn.query(
+      `UPDATE vehicle_queue
+          SET zone_id = NULL
+        WHERE zone_id = ?
+          AND queue_status = 'DISPATCHED'`,
+      [zone_id]
+    );
+
+    // ---- 5. Finally delete the zone ----
+    const [delResult] = await conn.query(
+      `DELETE FROM dispatch_zones WHERE zone_id = ?`,
+      [zone_id]
+    );
+
+    await conn.commit();
+    conn.release();
+
+    console.log(
+      `[dispatch] zone ${zone_id} (${zone.zone_name}) HARD DELETED — ` +
+      `queue_deleted=${waitingDel.affectedRows}, ` +
+      `logs_orphaned=${logUpdate.affectedRows}, ` +
+      `dispatched_orphaned=${dispatchedUpdate.affectedRows}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Dispatch zone permanently deleted.",
+      zone_id: Number(zone_id),
+      zone_name: zone.zone_name,
+      waiting_entries_deleted:  waitingDel.affectedRows,
+      departure_logs_orphaned:  logUpdate.affectedRows,
+      dispatched_entries_orphaned: dispatchedUpdate.affectedRows,
+    });
+
+  } catch (err) {
+    await conn.rollback();
+    conn.release();
+    console.error("deleteDispatchZoneArea error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete dispatch zone.",
+      error: err.message,
+    });
   }
 };
 

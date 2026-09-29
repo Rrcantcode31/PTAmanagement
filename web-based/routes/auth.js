@@ -31,6 +31,7 @@ router.get('/getDispatchAreZone', authController.isLoggedIn, authController.getD
 router.delete('/DeleteDriverInfo', authController.isLoggedIn, authController.DeleteDriverInfo);
 router.delete('/DeleteTerminalLocation/:terminal_id', authController.isLoggedIn, authController.DeleteTerminalLocation);
 router.delete('deleteFarePrice', authController.isLoggedIn, authController.deleteFarePrice);
+router.delete('/deleteDispatchAreaZone/:zone_id', authController.isLoggedIn, authController.deleteDispatchZoneArea);
 
 
 module.exports = router;
