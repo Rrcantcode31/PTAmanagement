@@ -131,15 +131,15 @@
           ================================ */
         .dashboard-row {
           display: flex;
-          align-items: stretch;              /* profile matches header height */
-          gap: 15px;                         /* space between profile and header */
-          margin-bottom: 30px;               /* replaces the header's old margin */
+          align-items: stretch;              
+          gap: 15px;                        
+          margin-bottom: 30px;              
         }
 
         /* The gradient header shrinks to fill the rest of the row */
         .dashboard-row .dashboard-header {
           flex: 1;
-          margin-bottom: 0;                  /* the row now handles spacing */
+          margin-bottom: 0;                  
         }
 
         .admin-profile-avatar {
@@ -364,59 +364,97 @@
         gap: 20px;
     }
 
-   .admin-info {
-    text-align: right;
-}
+        .admin-info {
+          text-align: right;
+      }
 
-.admin-info strong {
-    display: block;
-    color: #319086;
-    font-size: 14px;
-    font-weight: 600;
-}
+      .admin-info strong {
+          display: block;
+          color: #319086;
+          font-size: 14px;
+          font-weight: 600;
+      }
 
-.admin-info span {
-    font-size: 13px;
-    color: #555;
-}
+      .admin-info span {
+          font-size: 13px;
+          color: #555;
+      }
 
-        .stats-section {
+              /* ================================
+        DASHBOARD STATS
+        ================================ */
+      .stats-section {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 20px;
-        margin-bottom: 30px;
-        align-items: start;
-        }
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+        align-items: stretch;
+      }
 
-        .active-vehicles,
-        .active-drivers {
+      .stat-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
         background: #c9dbdb76;
         border-radius: 20px;
-        padding: 10px;
-        height: 100%;
-        text-align: center;
+        padding: 18px 20px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        transition: all 0.3s ease;
-        }
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+      }
 
-        .active-vehicles:hover,
-        .active-drivers:hover {
-        transform: translateY(-5px);
-        }
+      .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 16px rgba(49, 144, 134, 0.12);
+      }
 
-        .active-vehicles h4,
-        .active-drivers h4{
-        font-size: 16px;
-        color: #319086;
-        margin-bottom: 6px;
-        }
+      .stat-icon {
+        flex-shrink: 0;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        color: #ffffff;
+      }
 
-        .active-vehicles p,
-        .active-drivers p {
-        font-size: 24px;
+      .stat-icon-zones      { background: linear-gradient(135deg, #319086, #43aca1); }
+      .stat-icon-queue      { background: linear-gradient(135deg, #d97706, #f59e0b); }
+      .stat-icon-dispatched { background: linear-gradient(135deg, #2563eb, #60a5fa); }
+      .stat-icon-drivers    { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+
+      .stat-content {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .stat-label {
+        font-size: 11px;
         font-weight: 700;
-        color: #333;
-        }
+        color: #319086;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 2px;
+      }
+
+      .stat-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: #1f2937;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stat-sub {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
         .map-card {
         background: #c9dbdb76;

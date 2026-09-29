@@ -446,6 +446,55 @@ exports.getVehicles =async (req, res) => {
  }
 }
 
+// Get Dashboard stats
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const [[zones]] = await dbPool.promise().query(
+      `SELECT
+         COUNT(*) AS active_zones,
+         COUNT(DISTINCT terminal_id) AS terminals_with_zones
+       FROM dispatch_zones
+       WHERE is_active = 1`
+    );
+
+    const [[queue]] = await dbPool.promise().query(
+      `SELECT COUNT(*) AS in_queue
+         FROM vehicle_queue
+        WHERE queue_status = 'WAITING'`
+    );
+
+    const [[dispatched]] = await dbPool.promise().query(
+      `SELECT COUNT(*) AS today
+         FROM departure_logs
+        WHERE DATE(departure_time) = CURDATE()`
+    );
+
+    const [[drivers]] = await dbPool.promise().query(
+      `SELECT COUNT(*) AS active
+         FROM driverauth
+        WHERE status = 'ACTIVE'`
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        active_zones:         zones.active_zones         || 0,
+        terminals_with_zones: zones.terminals_with_zones || 0,
+        in_queue:             queue.in_queue             || 0,
+        dispatched_today:     dispatched.today           || 0,
+        active_drivers:       drivers.active             || 0,
+      },
+    });
+  } catch (err) {
+    console.error('getDashboardStats error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load dashboard stats',
+      error: err.message,
+    });
+  }
+};
+
 // {--- DRIVER MANAGEMENT BACKEND AREA ---}
 
 // Admin Insert driver info and auth

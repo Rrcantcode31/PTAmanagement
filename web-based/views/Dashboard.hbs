@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="/css/dashboard.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script defer src="/js/dashboard.js"></script>
+  <script defer src="/js/dashboard.js"></script>\
+  <script defer src="/js/dashboard-stats.js"></script>
   <script defer src="/js/admin-profile.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -72,17 +73,51 @@
 
       <section class="stats-section">
 
-      <div class="active-vehicles">
-        <h4>Active Vehicles</h4>
-       <p>0</p>
-      </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-zones">
+            <i class="fas fa-map-marked-alt"></i>
+            </div>
+            <div class="stat-content">
+            <span class="stat-label">Active Zones</span>
+            <span class="stat-value" id="stat-active-zones">—</span>
+            <span class="stat-sub" id="stat-active-zones-sub">across — terminals</span>
+            </div>
+        </div>
 
-      <div class="active-drivers">
-        <h4>Active Drivers</h24>
-       <p>0</p>
-      </div>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-queue">
+            <i class="fas fa-hourglass-half"></i>
+            </div>
+            <div class="stat-content">
+            <span class="stat-label">In Queue</span>
+            <span class="stat-value" id="stat-in-queue">—</span>
+            <span class="stat-sub">waiting for dispatch</span>
+            </div>
+        </div>
 
-      </section>
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-dispatched">
+            <i class="fas fa-paper-plane"></i>
+            </div>
+            <div class="stat-content">
+            <span class="stat-label">Dispatched Today</span>
+            <span class="stat-value" id="stat-dispatched-today">—</span>
+            <span class="stat-sub">trips since midnight</span>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-drivers">
+            <i class="fas fa-user-check"></i>
+            </div>
+            <div class="stat-content">
+            <span class="stat-label">Drivers Active</span>
+            <span class="stat-value" id="stat-active-drivers">—</span>
+            <span class="stat-sub">inside polygons now</span>
+            </div>
+        </div>
+
+        </section>
 
       <section class="map-section">
         <div class="map-card">
