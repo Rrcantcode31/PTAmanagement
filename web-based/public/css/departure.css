@@ -173,7 +173,7 @@
 
         /* ========== DEPARTURE LOG SPECIFIC STYLES (clean, matching design) ========== */
         .logs-panel {
-            background: white;
+            background: linear-gradient(135deg,#9ce0e06b,#c9dbdb52);
             border-radius: 24px;
             padding: 1.5rem;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.03);
