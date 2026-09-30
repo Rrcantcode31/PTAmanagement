@@ -4,28 +4,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const busPanel = document.getElementById("busPanel");
   const tabButtons = document.querySelectorAll(".tab-btn");
 
-  try {
-
-    const response = await fetch("/getDriverInfo");
-    const data = await response.json();
-
-    console.log("Driver info response:", data); // TEMP — check terminal_name is present
-
-    const vans = data.filter(v =>
-      v.type_name?.toLowerCase().includes("van") ||
-      v.type_name?.toLowerCase().includes("vehicle")
-    );
-
-    const buses = data.filter(v =>
-      v.type_name?.toLowerCase().includes("bus")
-    );
-
-    renderGroupedList(vans, vanPanel);
-    renderGroupedList(buses, busPanel);
-
-  } catch (err) {
-    console.error("Failed to fetch drivers:", err);
-  }
+  // Track current tab so we can re-render only the visible panel if desired
+  let activeTab = "vanPanel";
 
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
@@ -33,9 +13,39 @@ document.addEventListener("DOMContentLoaded", async () => {
       btn.classList.add("active");
       vanPanel.classList.add("hidden");
       busPanel.classList.add("hidden");
-      document.getElementById(btn.dataset.target).classList.remove("hidden");
+      const target = btn.dataset.target;
+      document.getElementById(target).classList.remove("hidden");
+      activeTab = target;
     });
   });
+
+  async function refreshVehicles() {
+    try {
+      const response = await fetch("/getDriverInfo", { credentials: "include" });
+      const data = await response.json();
+
+      const vans = data.filter(v =>
+        v.type_name?.toLowerCase().includes("van") ||
+        v.type_name?.toLowerCase().includes("vehicle")
+      );
+
+      const buses = data.filter(v =>
+        v.type_name?.toLowerCase().includes("bus")
+      );
+
+      renderGroupedList(vans, vanPanel);
+      renderGroupedList(buses, busPanel);
+
+    } catch (err) {
+      console.error("Failed to fetch drivers:", err);
+    }
+  }
+
+  // Initial render
+  await refreshVehicles();
+
+  // Refresh every 5 seconds so status badges stay live
+  setInterval(refreshVehicles, 5000);
 
 });
 

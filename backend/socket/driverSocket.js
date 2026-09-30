@@ -71,6 +71,10 @@ export function registerDriverHandlers(io, socket) {
       const sustainedInside = sustainedInsideMs >= REQUIRED_INSIDE_MS;
 
       // ---------- 5. Debounced status decision ----------
+      // OUTSIDE                     → INACTIVE immediately
+      // INSIDE + sustained          → ACTIVE
+      // INSIDE + previously ACTIVE  → stay ACTIVE (avoids false justLeft after restart)
+      // INSIDE + not sustained      → hold previous status (no flicker)
       let newStatus;
       if (!insideZone) {
         newStatus = "INACTIVE";
@@ -163,7 +167,7 @@ export function registerDriverHandlers(io, socket) {
         );
         if (existingRows.length > 0) return;
 
-        // ---- Decide starting status ----
+        // ---- Decide starting status: WAITING if group empty, else QUEUED ----
         const [waitingCount] = await db.promise().query(
           `SELECT COUNT(*) AS n
              FROM vehicle_queue
@@ -232,6 +236,7 @@ export function registerDriverHandlers(io, socket) {
         if (qRows.length > 0) {
           const q = qRows[0];
 
+          // Replace any existing timer
           if (pendingDepartureTimers.has(driverId)) {
             clearTimeout(pendingDepartureTimers.get(driverId));
           }
@@ -241,6 +246,7 @@ export function registerDriverHandlers(io, socket) {
             await conn.beginTransaction();
 
             try {
+              // Re-check: still outside?
               const [checkRows] = await conn.query(
                 `SELECT status FROM driverauth WHERE driver_id = ?`,
                 [driverId]
@@ -253,6 +259,7 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
+              // Still WAITING?
               const [stillWaiting] = await conn.query(
                 `SELECT queue_id, bounds_id, vehicle_id, zone_id
                    FROM vehicle_queue
@@ -267,6 +274,7 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
+              // 1. Mark as DISPATCHED
               await conn.query(
                 `UPDATE vehicle_queue
                     SET queue_status = 'DISPATCHED', served_at = NOW()
@@ -274,6 +282,7 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id]
               );
 
+              // 2. Write departure log
               const [logResult] = await conn.query(
                 `INSERT INTO departure_logs
                     (queue_id, driver_info_id, vehicle_id, bounds_id,
@@ -283,6 +292,7 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
               );
 
+              // 3. Promote the next QUEUED to WAITING
               const [nextInLine] = await conn.query(
                 `SELECT queue_id FROM vehicle_queue
                   WHERE queue_status = 'QUEUED'

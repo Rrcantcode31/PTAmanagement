@@ -28,12 +28,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Currently selected driver (for update/delete)
   let selectedDriverId = null;
 
-  //fetch sections
-  await loadTerminals();
-  await loadVehicles();
-
   // ==========================================================
-  // VALIDATION MODAL (moved to be self-contained, correctly closed)
+  // VALIDATION MODAL
   // ==========================================================
 
   function showValidationModal({
@@ -54,7 +50,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     validationCancel.textContent = cancelText;
     validationCancel.style.display = showCancel ? "inline-block" : "none";
 
-    // Change icon
     if (type === "delete") {
       validationIcon.textContent = "🗑️";
     } else if (type === "success") {
@@ -68,7 +63,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return new Promise((resolve) => {
       validationResolve = resolve;
     });
-
   }
 
   function closeValidationModal(result) {
@@ -100,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ==========================================================
-  // DRIVER FORM HELPERS (now correctly top-level)
+  // DRIVER FORM HELPERS
   // ==========================================================
 
   function loadDriverOptions() {
@@ -141,7 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function populateModalFromDriver(driver) {
     document.getElementById("email").value = driver.email || "";
-    document.getElementById("password").value = ""; // never pre-fill password
+    document.getElementById("password").value = "";
     document.getElementById("first_name").value = driver.first_name || "";
     document.getElementById("middle_name").value = driver.middle_name || "";
     document.getElementById("last_name").value = driver.last_name || "";
@@ -241,23 +235,22 @@ document.addEventListener('DOMContentLoaded', async () => {
           .filter(Boolean).join(" ")
       : `Driver #${selectedDriverId}`;
 
-    const plate_number = driver 
-      ? [driver.plate_number]
-              .filter(Boolean).join(" ")
-              : `Driver #${selectedDriverId}`;  
+    const plate_number = driver
+      ? [driver.plate_number].filter(Boolean).join(" ")
+      : `Driver #${selectedDriverId}`;
 
     const confirmed = await showValidationModal({
-  type: "delete",
-  title: "Delete Driver?",
-  message:
-    `Permanently delete <span class="highlight-value">${fullName || "this driver"}</span>? ` +
-    `with a vehicle <span class="highlight-value">${plate_number || "this vehicle"}</span>? ` +
-    `This will delete the driver's information and authentication account. ` +
-    `<strong>This action cannot be undone.</strong>`,
-  confirmText: "Delete",
-  cancelText: "Cancel",
-  showCancel: true
-});
+      type: "delete",
+      title: "Delete Driver?",
+      message:
+        `Permanently delete <span class="highlight-value">${fullName || "this driver"}</span>? ` +
+        `with a vehicle <span class="highlight-value">${plate_number || "this vehicle"}</span>? ` +
+        `This will delete the driver's information and authentication account. ` +
+        `<strong>This action cannot be undone.</strong>`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      showCancel: true
+    });
 
     if (!confirmed) return;
 
@@ -307,218 +300,219 @@ document.addEventListener('DOMContentLoaded', async () => {
         showCancel: false
       });
     }
-
   });
 
   // ==========================================================
   // SAVE (ADD / UPDATE)
   // ==========================================================
 
- saveBtn.addEventListener("click", async () => {
-  try {
-    const basePayload = {
-      email: document.getElementById("email").value.trim(),
-      password: document.getElementById("password").value,
-      first_name: document.getElementById("first_name").value.trim(),
-      middle_name: document.getElementById("middle_name").value.trim(),
-      last_name: document.getElementById("last_name").value.trim(),
-      contact_number: document.getElementById("contact_number").value.trim(),
-      plate_number: document.getElementById("plate_number").value.trim(),
-      type_id: document.getElementById("type_id").value,
-      terminal_id: document.getElementById("terminal_id").value,
-    };
-
-    let url;
-    let payload;
-    let successMessage;
-    let method = "POST";
-
-    // ==========================
-    // UPDATE DRIVER
-    // ==========================
-    if (updateMode) {
-      url = "/UpdateDriverCred";
-
-      // IMPORTANT:
-      // Backend route is router.put(...)
-      method = "PUT";
-
-      payload = {
-        driver_id: Number(selectedDriverId),
-        ...basePayload
+  saveBtn.addEventListener("click", async () => {
+    try {
+      const basePayload = {
+        email: document.getElementById("email").value.trim(),
+        password: document.getElementById("password").value,
+        first_name: document.getElementById("first_name").value.trim(),
+        middle_name: document.getElementById("middle_name").value.trim(),
+        last_name: document.getElementById("last_name").value.trim(),
+        contact_number: document.getElementById("contact_number").value.trim(),
+        plate_number: document.getElementById("plate_number").value.trim(),
+        type_id: document.getElementById("type_id").value,
+        terminal_id: document.getElementById("terminal_id").value,
       };
 
-      successMessage = "Driver updated successfully!";
+      let url;
+      let payload;
+      let successMessage;
+      let method = "POST";
 
-    // ==========================
-    // ADD DRIVER
-    // ==========================
-    } else {
-      url = "/InsertDriverInfo";
+      if (updateMode) {
+        url = "/UpdateDriverCred";
+        method = "PUT";
+        payload = {
+          driver_id: Number(selectedDriverId),
+          ...basePayload
+        };
+        successMessage = "Driver updated successfully!";
+      } else {
+        url = "/InsertDriverInfo";
+        method = "POST";
+        payload = {
+          ...basePayload,
+          role_id: document.getElementById("role_id").value,
+          status: "Inactive"
+        };
+        successMessage = "Driver added successfully!";
+      }
 
-      method = "POST";
+      console.log("Sending request:", { method, url, payload });
 
-      payload = {
-        ...basePayload,
-        role_id: document.getElementById("role_id").value,
-        status: "Inactive"
-      };
-
-      successMessage = "Driver added successfully!";
-    }
-
-    console.log("Sending request:", {
-      method,
-      url,
-      payload
-    });
-
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      },
-      body: JSON.stringify(payload),
-      credentials: "include"
-    });
-
-    const contentType = res.headers.get("content-type") || "";
-
-    // Prevent "Unexpected token <" when server returns HTML
-    if (!contentType.includes("application/json")) {
-      const text = await res.text();
-
-      console.error("Server returned non-JSON:", {
-        status: res.status,
-        response: text
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(payload),
+        credentials: "include"
       });
 
-      throw new Error(
-        `Server returned an unexpected response (${res.status}).`
-      );
-    }
+      const contentType = res.headers.get("content-type") || "";
 
-    const data = await res.json();
-
-    if (!res.ok || !data.success) {
-      throw new Error(
-        data.message || "Failed to save driver"
-      );
-    }
-
-    hideModal();
-    clearDriverModalInputs();
-    resetModes();
-    clearRowSelection();
-
-    await showValidationModal({
-      type: "success",
-      title: updateMode ? "Driver Updated" : "Driver Added",
-      message: successMessage,
-      confirmText: "OK",
-      showCancel: false
-    });
-
-    location.reload();
-
-  } catch (err) {
-    console.error("Save driver error:", err);
-
-    await showValidationModal({
-      type: "error",
-      title: "Save Failed",
-      message: err.message || "Failed to save driver.",
-      confirmText: "OK",
-      showCancel: false
-    });
-  }
-});
-
-  // ==========================================================
-  // LOAD DRIVER LIST
-  // ==========================================================
-
-  try {
-    const res = await fetch("/getDriverInfo");
-    const data = await res.json();
-    if (!data || data.length === 0) return container.innerHTML = "<p>No Info found found.</p>";
-
-    const grouped = {};
-    data.forEach(item => {
-      const vehicleType = item.type_name || "Uncategorized";
-      if (!grouped[vehicleType]) grouped[vehicleType] = [];
-      grouped[vehicleType].push(item);
-      driverCache[item.driver_id] = item;
-    });
-    container.innerHTML = "";
-
-    Object.entries(grouped).forEach(([vehicleType, drivers]) => {
-      const categoryHeader = document.createElement("div");
-      categoryHeader.classList.add("vehicle-header");
-      categoryHeader.textContent = vehicleType.toUpperCase();
-      container.appendChild(categoryHeader);
-
-      drivers.forEach(driver => {
-        const row = document.createElement("div");
-        row.classList.add("data-row");
-        row.dataset.driverId = driver.driver_id;
-
-        row.addEventListener("click", () => {
-          const alreadySelected = row.classList.contains("selected");
-          clearRowSelection();
-
-          if (alreadySelected) {
-            if (updateMode) clearDriverModalInputs();
-            return;
-          }
-
-          row.classList.add("selected");
-          selectedDriverId = driver.driver_id;
-
-          if (updateMode) {
-            if (driverSelect) driverSelect.value = driver.driver_id;
-            populateModalFromDriver(driver);
-          }
+      if (!contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Server returned non-JSON:", {
+          status: res.status,
+          response: text
         });
+        throw new Error(`Server returned an unexpected response (${res.status}).`);
+      }
 
-        const vehicleTypecell = document.createElement("div");
-        vehicleTypecell.classList.add("data-cell", "col-vehicle");
-        vehicleTypecell.textContent = "~";
+      const data = await res.json();
 
-        const nameCell = document.createElement("div");
-        nameCell.classList.add("data-cell", "col-driver-name");
-        const fullName = [driver.first_name, driver.middle_name, driver.last_name]
-          .filter(Boolean).join(" ");
-        nameCell.textContent = fullName || "No Name";
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save driver");
+      }
 
-        const contactCell = document.createElement("div");
-        contactCell.classList.add("data-cell", "col-cont-no");
-        contactCell.textContent = driver.contact_number || "No Data";
+      hideModal();
+      clearDriverModalInputs();
+      resetModes();
+      clearRowSelection();
 
-        const Statuscell = document.createElement("div");
-        Statuscell.classList.add("data-cell", "col-status", "data-highlight");
-        Statuscell.textContent = driver.status || "Inactive";
-
-        const unitCell = document.createElement("div");
-        unitCell.classList.add("data-cell", "col-plate-no");
-        unitCell.textContent = driver.plate_number || "-";
-
-        row.appendChild(vehicleTypecell);
-        row.appendChild(nameCell);
-        row.appendChild(contactCell);
-        row.appendChild(Statuscell);
-        row.appendChild(unitCell);
-        container.appendChild(row);
+      await showValidationModal({
+        type: "success",
+        title: updateMode ? "Driver Updated" : "Driver Added",
+        message: successMessage,
+        confirmText: "OK",
+        showCancel: false
       });
-    });
 
-  } catch (err) {
-    console.error(err);
-    container.innerHTML = "<p>Error loading drivers.</p>";
+      location.reload();
+
+    } catch (err) {
+      console.error("Save driver error:", err);
+      await showValidationModal({
+        type: "error",
+        title: "Save Failed",
+        message: err.message || "Failed to save driver.",
+        confirmText: "OK",
+        showCancel: false
+      });
+    }
+  });
+
+  // ==========================================================
+  // LOAD DRIVER LIST  (with polling)
+  // ==========================================================
+
+  async function renderDriverList() {
+    try {
+      const res = await fetch("/getDriverInfo", { credentials: "include" });
+      const data = await res.json();
+
+      if (!data || data.length === 0) {
+        container.innerHTML = "<p>No drivers found.</p>";
+        driverCache = {};
+        return;
+      }
+
+      // ---- rebuild cache ----
+      const newCache = {};
+      data.forEach(item => {
+        newCache[item.driver_id] = item;
+      });
+      driverCache = newCache;
+
+      // ---- group by vehicle type ----
+      const grouped = {};
+      data.forEach(item => {
+        const vehicleType = item.type_name || "Uncategorized";
+        if (!grouped[vehicleType]) grouped[vehicleType] = [];
+        grouped[vehicleType].push(item);
+      });
+
+      container.innerHTML = "";
+
+      Object.entries(grouped).forEach(([vehicleType, drivers]) => {
+        const categoryHeader = document.createElement("div");
+        categoryHeader.classList.add("vehicle-header");
+        categoryHeader.textContent = vehicleType.toUpperCase();
+        container.appendChild(categoryHeader);
+
+        drivers.forEach(driver => {
+          const row = document.createElement("div");
+          row.classList.add("data-row");
+          row.dataset.driverId = driver.driver_id;
+
+          // Restore highlight if this row was already selected
+          if (String(driver.driver_id) === String(selectedDriverId)) {
+            row.classList.add("selected");
+          }
+
+          row.addEventListener("click", () => {
+            const alreadySelected = row.classList.contains("selected");
+            clearRowSelection();
+
+            if (alreadySelected) {
+              if (updateMode) clearDriverModalInputs();
+              return;
+            }
+
+            row.classList.add("selected");
+            selectedDriverId = driver.driver_id;
+
+            if (updateMode) {
+              if (driverSelect) driverSelect.value = driver.driver_id;
+              populateModalFromDriver(driver);
+            }
+          });
+
+          const vehicleTypecell = document.createElement("div");
+          vehicleTypecell.classList.add("data-cell", "col-vehicle");
+          vehicleTypecell.textContent = "~";
+
+          const nameCell = document.createElement("div");
+          nameCell.classList.add("data-cell", "col-driver-name");
+          const fullName = [driver.first_name, driver.middle_name, driver.last_name]
+            .filter(Boolean).join(" ");
+          nameCell.textContent = fullName || "No Name";
+
+          const contactCell = document.createElement("div");
+          contactCell.classList.add("data-cell", "col-cont-no");
+          contactCell.textContent = driver.contact_number || "No Data";
+
+          const statusCell = document.createElement("div");
+          statusCell.classList.add("data-cell", "col-status", "data-highlight");
+          statusCell.textContent = driver.status || "Inactive";
+
+          const unitCell = document.createElement("div");
+          unitCell.classList.add("data-cell", "col-plate-no");
+          unitCell.textContent = driver.plate_number || "-";
+
+          row.appendChild(vehicleTypecell);
+          row.appendChild(nameCell);
+          row.appendChild(contactCell);
+          row.appendChild(statusCell);
+          row.appendChild(unitCell);
+          container.appendChild(row);
+        });
+      });
+
+    } catch (err) {
+      console.error("renderDriverList error:", err);
+      container.innerHTML = "<p>Error loading drivers.</p>";
+    }
   }
 
-  //fetch terminal locations
+  // Initial render
+  await renderDriverList();
+
+  // Refresh every 5 seconds
+  setInterval(renderDriverList, 5000);
+
+  // ==========================================================
+  // LOAD TERMINALS + VEHICLES (for the Add/Update modal)
+  // ==========================================================
+
   async function loadTerminals() {
     try {
       const res = await fetch('/terminals');
@@ -534,9 +528,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       console.error("Failed to load terminals:", err);
     }
-  };
+  }
 
-  //fetch vehicles
   async function loadVehicles() {
     try {
       const res = await fetch('/getVehicles');
@@ -550,8 +543,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         vehicleSelect.appendChild(option);
       });
     } catch (err) {
-      console.error("Failed to load vehicles:", err)
+      console.error("Failed to load vehicles:", err);
     }
-  };
+  }
+
+  await loadTerminals();
+  await loadVehicles();
 
 });
