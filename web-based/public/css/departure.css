@@ -241,6 +241,7 @@
             cursor: pointer;
         }
 
+
         .table-container {
             overflow-x: auto;
             border-radius: 20px;
@@ -347,6 +348,24 @@
             padding: 56px 20px;
             color: #6b7b7e;
         }
+
+        input[type="date"] {
+            padding: 8px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            font-family: inherit;
+            color: #333;
+            cursor: pointer;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.6;
+        }
+
+            input[type="date"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+         }
                 /* ==================================================
         DEPARTURE TABLE
         ================================================== */

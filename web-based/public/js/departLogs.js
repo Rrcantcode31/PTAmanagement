@@ -1,13 +1,16 @@
 // ==================================================
 // DEPARTURE LOGS
 // Fetches /getDepartureLogs and renders the table
+// Loads only after a terminal is selected.
+// Also filters by date (YYYY-MM-DD) when provided.
 // ==================================================
 document.addEventListener('DOMContentLoaded', () => {
 
-  const API          = '/getDepartureLogs';
+  const API           = '/getDepartureLogs';
   const TERMINALS_API = '/terminals';
 
-  const filterSelect = document.getElementById('terminal_id'); // or #terminal-filter
+  const filterSelect = document.getElementById('terminal_id');
+  const dateInput    = document.getElementById('departure_date');
   const tbody        = document.getElementById('departure-list');
   const emptyState   = document.getElementById('departure-empty');
   const totalCount   = document.getElementById('departure-total');
@@ -46,6 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==================================================
+  // Empty-state helpers
+  // ==================================================
+  function showPrompt(message) {
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    emptyState.querySelector('p').textContent = message;
+    totalCount.textContent = '0 total departures';
+  }
+
+  // ==================================================
   // Render
   // ==================================================
   function render(rows) {
@@ -53,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (rows.length === 0) {
       emptyState.style.display = 'block';
+      emptyState.querySelector('p').textContent = 'No departure logs for this selection.';
       totalCount.textContent = '0 total departures';
       return;
     }
@@ -85,13 +99,22 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================================================
   // Fetch logs
   // ==================================================
-  async function loadLogs(terminalId) {
-    try {
-      const url = terminalId
-        ? `${API}?terminal_id=${encodeURIComponent(terminalId)}`
-        : API;
+  async function loadLogs() {
+    const terminalId = filterSelect?.value || null;
+    const date       = dateInput?.value   || null;
 
-      const res  = await fetch(url, {
+    // Only load when a terminal is selected.
+    if (!terminalId) {
+      showPrompt('Select a terminal to view departure logs.');
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.set('terminal_id', terminalId);
+      if (date) params.set('date', date);
+
+      const res = await fetch(`${API}?${params.toString()}`, {
         credentials: 'include',
         headers: { 'Accept': 'application/json' }
       });
@@ -106,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('[departureLogs] load failed:', err);
       emptyState.style.display = 'block';
       emptyState.querySelector('p').textContent = 'Failed to load departure logs.';
+      totalCount.textContent = '—';
     }
   }
 
@@ -116,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!filterSelect) return;
 
     try {
-      const res  = await fetch(TERMINALS_API, {
+      const res = await fetch(TERMINALS_API, {
         credentials: 'include',
         headers: { 'Accept': 'application/json' }
       });
@@ -137,14 +161,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Events
   // ==================================================
   if (filterSelect) {
-    filterSelect.addEventListener('change', function () {
-      loadLogs(this.value || null);
-    });
+    filterSelect.addEventListener('change', loadLogs);
+  }
+
+  if (dateInput) {
+    dateInput.addEventListener('change', loadLogs);
   }
 
   // ==================================================
   // Init
   // ==================================================
-  loadTerminalFilter();
-  loadLogs(null);
+  (async () => {
+    await loadTerminalFilter();
+    // Do NOT auto-load. Show prompt until a terminal is chosen.
+    showPrompt('Select a terminal to view departure logs.');
+  })();
+
 });

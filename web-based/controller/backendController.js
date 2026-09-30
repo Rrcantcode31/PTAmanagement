@@ -1914,7 +1914,7 @@ exports.dispatchDriver = async (req, res) => {
 // Get departure log
 exports.getDepartureLogs = async (req, res) => {
   try {
-    const { terminal_id, limit = 200 } = req.query;
+    const { terminal_id, date, limit = 200 } = req.query;
 
     const [rows] = await dbPool.promise().query(
       `SELECT
@@ -1948,9 +1948,14 @@ exports.getDepartureLogs = async (req, res) => {
        LEFT JOIN terminal_locations tt  ON b.to_terminal_id   = tt.terminal_id
        LEFT JOIN dispatch_zones dz      ON dl.zone_id         = dz.zone_id
        WHERE (? IS NULL OR dz.terminal_id = ?)
+         AND (? IS NULL OR DATE(dl.departure_time) = ?)
        ORDER BY dl.departure_time DESC
        LIMIT ?`,
-      [terminal_id || null, terminal_id || null, Number(limit)]
+      [
+        terminal_id || null, terminal_id || null,
+        date        || null, date        || null,
+        Number(limit)
+      ]
     );
 
     return res.json({ success: true, data: rows });
