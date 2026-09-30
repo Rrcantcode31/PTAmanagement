@@ -3,6 +3,8 @@ import { registerDriverHandlers } from "./driverSocket.js";
 import { registerAdminHandlers } from "./adminSocket.js";
 import { registerQueueHandlers } from "./queueHandlers.js";
 
+let _io = null;
+
 export function initSocket(server) {
   const io = new Server(server, {
     cors: {
@@ -18,6 +20,8 @@ export function initSocket(server) {
     },
   });
 
+  _io = io;
+
   io.on("connection", (socket) => {
     registerDriverHandlers(io, socket);
     registerAdminHandlers(io, socket);
@@ -29,4 +33,11 @@ export function initSocket(server) {
   });
 
   return io;
+}
+
+export function getIO() {
+  if (!_io) {
+    throw new Error("Socket.IO not initialized — call initSocket(server) first");
+  }
+  return _io;
 }

@@ -8,7 +8,8 @@
     <link rel="stylesheet" href="/css/departure.css" />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-    
+
+    <script defer src="/js/departLogs.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -30,64 +31,82 @@
         </aside>
 
         <!-- MAIN CONTENT -->
-    <main class="main-content">
+        <main class="main-content">
 
-      <!-- HEADER -->
-      <header class="dashboard-header">
-        <div class="header-left">
-          <h1>Welcome, {{adminAuth.first_name}}</h1>
-          <p>Fare Prices</p>
-        </div>
+            <!-- HEADER -->
+            <header class="dashboard-header">
+                <div class="header-left">
+                    <h1>Welcome, {{adminAuth.first_name}}</h1>
+                    <p>Departure Logs Overview</p>
+                </div>
 
-        <div class="header-right">
-          <div class="admin-info">
-            <strong>{{adminAuth.role}}</strong>
-          </div>
-        </div>
-      </header>
+                <div class="header-right">
+                    <div class="admin-info">
+                        <strong>{{adminAuth.role}}</strong>
+                    </div>
+                </div>
+            </header>
 
-            <!-- DEPARTURE LOG LISTING UI (empty state, ready for dynamic data) -->
+            <!-- DEPARTURE LOG LISTING -->
             <div class="logs-panel">
+
                 <div class="logs-header">
                     <div class="section-title">
-                        <i class="fas fa-calendar-check"></i>
-                        <span>Departure Logs</span>
+                        <div class="section-title-heading">
+                            <i class="fas fa-calendar-check"></i>
+                            <span>Departure Logs</span>
+                        </div>
+                        <p>All departures, grouped by terminal</p>
                     </div>
+
                     <div class="route-selector">
                         <select id="terminal_id" name="terminal_id">
                             <option value="">Select Terminal</option>
                         </select>
                     </div>
                 </div>
+
                 <div class="table-container">
-                       <table class="departure-table" id="departureTable">
-                            <thead>
-                                <tr>
-                                    <th>Log ID</th>
-                                    <th>Plate Number</th>
-                                    <th>Driver Name</th>
-                                    <th>Arrival Time</th>
-                                    <th>Departure Time</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tableBody">
-                                <tr class="empty-row">
-                                    <td colspan="5">
-                                        <i class="fas fa-cloud-upload-alt" style="font-size: 1.8rem; opacity: 0.6; display: block; margin-bottom: 8px;"></i>
-                                        No departure logs loaded. Data will appear here.
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <table class="departure-table" id="departureTable">
+                        <thead>
+                            <tr>
+                                <th>Log ID</th>
+                                <th>Plate</th>
+                                <th>Driver Name</th>
+                                <th>Route</th>
+                                <th>approve by</th>
+                                <th>Departed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="departure-list">
+                            <tr class="loading-row">
+                                <td colspan="6">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: 1.6rem; opacity: 0.6; display: block; margin-bottom: 8px;"></i>
+                                    Loading departure logs…
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div id="departure-empty" class="empty-state" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <p>No departure logs loaded. Data will appear here.</p>
+                    </div>
                 </div>
+
                 <div class="log-stats">
-                    <div><i class="fas fa-chart-line"></i> <span id="logCount">0</span> total departures</div>
-                    <div class="refresh-hint"><i class="fas fa-sync-alt"></i> Ready for integration</div>
+                    <div>
+                        <i class="fas fa-chart-line"></i>
+                        <span id="departure-total">0 total departures</span>
+                    </div>
+                    <div class="refresh-hint">
+                        <i class="fas fa-sync-alt"></i>
+                        Updates on page load
+                    </div>
                 </div>
             </div>
+
         </main>
     </div>
-
-    
 </body>
 </html>

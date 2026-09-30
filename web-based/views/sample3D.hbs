@@ -46,7 +46,7 @@
       <header class="dashboard-header">
         <div class="header-left">
           <h1>Welcome, {{adminAuth.first_name}}</h1>
-          <p>3D oveview</p>
+          <p>Dispatch zone management</p>
         </div>
 
         <div class="header-right">
@@ -58,8 +58,13 @@
 
       <section class="map-section">
         <div class="map-card">
-          <h2>South Cotabato Terminal 2D MAP view</h2>
-
+          <div class="card-header">
+            <h2>
+              <i class="fas fa-map-marked-alt"></i>
+              Dispatch Zones — 2D Map
+            </h2>
+            <p>Draw and manage geofence zones for vehicle queuing</p>
+          </div>
           <div id="map"></div>
         </div>
       </section>

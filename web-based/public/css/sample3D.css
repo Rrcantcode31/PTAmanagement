@@ -1,5 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 
+/* ==================================================
+   BASE
+   ================================================== */
 * {
     margin: 0;
     padding: 0;
@@ -12,7 +15,9 @@ body {
     color: #333;
 }
 
-/* ========== SIDEBAR ========== */
+/* ==================================================
+   SIDEBAR
+   ================================================== */
 .sidebar {
     position: fixed;
     left: 0;
@@ -43,22 +48,6 @@ body {
     width: 190px;
     height: auto;
     border-radius: 25%;
-}
-
-.admin-info {
-    text-align: right;
-}
-
-.admin-info strong {
-    display: block;
-    color: #319086;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-.admin-info span {
-    font-size: 13px;
-    color: #555;
 }
 
 .nav-menu {
@@ -132,7 +121,9 @@ body {
     transform: translateY(-2px);
 }
 
-/* ========== MAIN CONTENT ========== */
+/* ==================================================
+   MAIN CONTENT
+   ================================================== */
 .main-content {
     margin-left: 210px;
     padding: 30px;
@@ -142,7 +133,9 @@ body {
     min-height: 100vh;
 }
 
-/* ========== DASHBOARD HEADER ========== */
+/* ==================================================
+   DASHBOARD HEADER
+   ================================================== */
 .dashboard-header {
     display: flex;
     justify-content: space-between;
@@ -165,7 +158,6 @@ body {
     color: #555;
 }
 
-/* Admin info - top right */
 .header-right {
     display: flex;
     align-items: center;
@@ -176,61 +168,21 @@ body {
     text-align: right;
 }
 
-.admin-info span {
+.admin-info strong {
     display: block;
-    font-size: 18px;
+    color: #319086;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.admin-info span {
+    font-size: 13px;
     color: #555;
-    margin-bottom: 5px;
 }
 
-.admin-info a {
-    text-decoration: none;
-    color: #319086;
-    padding: 6px 12px;
-    border-radius: 5px;
-    font-size: 18px;
-}
-
-/* ========== STATS ========== */
-.stats-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-    align-items: start;
-}
-
-.active-vehicles,
-.active-drivers {
-    background: #c9dbdb76;
-    border-radius: 20px;
-    padding: 10px;
-    height: 100%;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
-}
-
-.active-vehicles:hover,
-.active-drivers:hover {
-    transform: translateY(-5px);
-}
-
-.active-vehicles h4,
-.active-drivers h4 {
-    font-size: 16px;
-    color: #319086;
-    margin-bottom: 6px;
-}
-
-.active-vehicles p,
-.active-drivers p {
-    font-size: 24px;
-    font-weight: 700;
-    color: #333;
-}
-
-/* ========== MAP ========== */
+/* ==================================================
+   MAP CARD
+   ================================================== */
 .map-card {
     background: #c9dbdb76;
     border-radius: 25px;
@@ -239,26 +191,48 @@ body {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
-.map-card h2 {
-    color: #319086;
-    padding-bottom: 10px;
+.card-header {
+    padding: 0 0 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid rgba(49, 144, 134, 0.15);
 }
 
-.map-container {
-    margin-top: 20px;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #eee;
+.card-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #319086;
+    margin: 0 0 4px 0;
+    letter-spacing: 0.3px;
+}
+
+.card-header h2 i {
+    color: #43aca1;
+    font-size: 17px;
+    display: inline-block;
+}
+
+.card-header p {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 16px;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.3;
 }
 
 #map {
     height: 700px;
     width: 100%;
-    border-bottom-left-radius: 15px;
-    border-bottom-right-radius: 15px;
+    border-radius: 15px;
+    overflow: hidden;
 }
 
-/* ========== FLOATING ACTION BUTTONS ========== */
+/* ==================================================
+   FLOATING ACTION BUTTONS
+   ================================================== */
 .floating-actions {
     position: fixed;
     bottom: 25px;
@@ -291,7 +265,9 @@ body {
     box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
 }
 
-/* ========== TERMINAL MODAL ========== */
+/* ==================================================
+   TERMINAL MODAL
+   ================================================== */
 .terminal-modal {
     position: fixed;
     bottom: 100px;
@@ -361,9 +337,144 @@ body {
 }
 
 /* ==================================================
+   VALIDATION MODAL
+   ================================================== */
+.validation-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.validation-modal.hidden {
+    display: none;
+}
+
+.validation-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.validation-modal-box {
+    position: relative;
+    background: linear-gradient(135deg, #9ce0e0, #c9dbdb);
+    border-radius: 16px;
+    padding: 28px 26px;
+    width: 320px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    animation: validationPop 0.18s ease-out;
+}
+
+@keyframes validationPop {
+    from { transform: scale(0.92); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+.validation-icon {
+    font-size: 34px;
+    margin-bottom: 10px;
+}
+
+.validation-modal.delete .validation-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    color: #ea0000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    font-weight: 700;
+    background: #fde8e8;
+}
+
+.validation-modal-box h3 {
+    color: #0d2c29;
+    font-size: 18px;
+    margin-bottom: 10px;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.validation-modal-box p {
+    margin: 0 auto 25px;
+    max-width: 350px;
+    font-size: 15px;
+    font-family: 'Montserrat', sans-serif;
+    line-height: 1.6;
+    color: #3a3333;
+}
+
+.validation-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.validation-actions button {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#validation-cancel {
+    background: #eef5f4;
+    color: #5f7c77;
+}
+
+#validation-cancel:hover {
+    background: #e0eceb;
+}
+
+#validation-confirm {
+    background: #319086;
+    color: #fff;
+}
+
+#validation-confirm:hover {
+    background: #26756d;
+}
+
+.validation-modal.delete #validation-confirm {
+    background: #ea0000;
+}
+
+.validation-modal.delete #validation-confirm:hover {
+    background: #c40000;
+}
+
+.validation-modal.success #validation-confirm {
+    background: #319086;
+}
+
+.validation-modal.error #validation-confirm {
+    background: #ea0000;
+}
+
+.validation-modal.error #validation-confirm:hover {
+    background: #c40000;
+}
+
+.highlight-value {
+    font-weight: 700;
+    color: #b91c1c;
+    padding: 2px 7px;
+    border-radius: 6px;
+}
+
+/* ==================================================
    CUSTOM ZONE TOOLS DROPDOWN
    ================================================== */
-
 .zone-tools-control {
     position: relative;
     background: transparent !important;
@@ -508,10 +619,7 @@ body {
     background: #fee2e2;
 }
 
-/* ==================================================
-   ZONE TOOLS — Cancel button
-   ================================================== */
-
+/* Cancel button */
 .zone-tools-cancel {
     display: flex;
     align-items: center;
@@ -549,11 +657,18 @@ body {
     font-size: 14px;
 }
 
+/* Make the ghost pin stand out while dragging */
+.leaflet-marker-draggable {
+    cursor: move !important;
+}
+
+.leaflet-marker-draggable:hover {
+    filter: drop-shadow(0 0 6px rgba(255, 200, 0, 0.6));
+}
 
 /* ==================================================
    ZONE MODAL SYSTEM
    ================================================== */
-
 .zone-modal {
     position: fixed;
     inset: 0;
@@ -595,7 +710,6 @@ body {
     transform: scale(1) translateY(0);
 }
 
-/* Header */
 .zone-modal-header {
     display: flex;
     align-items: center;
@@ -642,7 +756,6 @@ body {
     transform: rotate(90deg);
 }
 
-/* Body */
 .zone-modal-body {
     padding: 22px;
 }
@@ -706,41 +819,32 @@ body {
     min-height: 14px;
 }
 
-/* Zone type — pill selector */
-.zone-type-pills {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+.zone-modal-hint {
+    display: flex;
+    align-items: flex-start;
     gap: 8px;
-}
-
-.zone-type-pill {
-    padding: 10px 6px;
-    background: #f4f9f8;
-    border: 1.5px solid #e0ecea;
-    border-radius: 10px;
+    padding: 10px 12px;
+    background: #eef7f5;
+    border-left: 3px solid #319086;
+    border-radius: 8px;
     font-family: 'Montserrat', sans-serif;
     font-size: 11px;
-    font-weight: 600;
+    color: #4a6b65;
+    line-height: 1.4;
+    margin-top: 4px;
+}
+
+.zone-modal-hint i {
+    color: #319086;
+    font-size: 12px;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+
+.zone-modal-hint strong {
     color: #1f3d38;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-align: center;
-    white-space: nowrap;
 }
 
-.zone-type-pill:hover {
-    background: #eaf6f4;
-    border-color: #c8e4df;
-}
-
-.zone-type-pill.is-selected {
-    background: #d5ede8;
-    border-color: #319086;
-    color: #1d6b5e;
-    box-shadow: 0 0 0 2px rgba(49, 144, 134, 0.15);
-}
-
-/* Footer */
 .zone-modal-footer {
     display: flex;
     gap: 10px;
@@ -807,7 +911,6 @@ body {
     transform: translateY(-1px);
 }
 
-/* Confirm modal variant */
 .zone-modal-confirm .zone-modal-body {
     text-align: center;
     padding: 30px 22px;
@@ -843,34 +946,16 @@ body {
     color: #1f3d38;
 }
 
-@media (max-width: 500px) {
-    .zone-type-pills {
-        grid-template-columns: repeat(2, 1fr);
+/* ==================================================
+   RESPONSIVE
+   ================================================== */
+@media (max-width: 780px) {
+    .main-content {
+        margin-left: 0;
+        padding: 20px;
+    }
+    .sidebar {
+        transform: translateX(-100%);
+        transition: 0.2s;
     }
 }
-
-.zone-modal-hint {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 10px 12px;
-    background: #eef7f5;
-    border-left: 3px solid #319086;
-    border-radius: 8px;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 11px;
-    color: #4a6b65;
-    line-height: 1.4;
-    margin-top: 4px;
-}
-
-.zone-modal-hint i {
-    color: #319086;
-    font-size: 12px;
-    margin-top: 1px;
-    flex-shrink: 0;
-}
-
-.zone-modal-hint strong {
-    color: #1f3d38;
-}   

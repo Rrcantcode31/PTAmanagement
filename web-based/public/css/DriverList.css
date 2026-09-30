@@ -180,6 +180,7 @@
     align-items: start;
     }
 
+
         /* PRODUCT SECTION */
      .driver-panel {
       background: #c9dbdb76;
@@ -191,9 +192,12 @@
     }
     
     .panel-title {
-      background: #c9dbdb76;
-      padding: 20px 28px;
-      border-bottom: 1px solid #e3efeb;
+     padding-bottom: 8px;              /* was 14px */
+     margin-bottom: 8px;               /* was 16px */
+     border-bottom: 1px solid rgba(49, 144, 134, 0.15);
+     background: #c9dbdb76;
+     padding: 20px 28px;
+      
     }
 
     .panel-title h2 {
@@ -201,8 +205,17 @@
       font-size: 1.35rem;
       font-weight: 700;
       display: flex;
+      margin: 0 0 2px 0;
       align-items: center;
       gap: 10px;
+    }
+
+    .panel-title p {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 16px;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.3; 
     }
 
     .table-wrapper {

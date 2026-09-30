@@ -32,6 +32,7 @@ router.get('/getVehicles', authController.isLoggedIn, authController.getVehicles
 router.get('/getFarePrice', authController.isLoggedIn, authController.getFarePrices);
 router.get('/getDispatchAreZone', authController.isLoggedIn, authController.getDispatchZoneArea);
 router.get('/dashboard-stats', authController.isLoggedIn, authController.getDashboardStats);
+router.get('/getDepartureLogs', authController.isLoggedIn, authController.getDepartureLogs);    
 
 //Admin delete function
 router.delete('/DeleteDriverInfo', authController.isLoggedIn, authController.DeleteDriverInfo);

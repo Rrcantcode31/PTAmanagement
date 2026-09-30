@@ -61,6 +61,31 @@ export function registerDriverHandlers(io, socket) {
           console.log(`[queue] cancelled pending departure for driver ${driverId}`);
         }
 
+        const cooldownTime = new Date(Date.now() - REQUEUE_COOLDOWN_SECONDS * 1000);
+
+        const [recentDispatch] = await db.promise().query(
+          `SELECT departure_id, departure_time
+            FROM departure_logs
+            WHERE driver_info_id = ?
+              AND departure_time > ?
+            ORDER BY departure_time DESC
+            LIMIT 1`,
+          [driverId, cooldownTime]
+        );
+
+        if (recentDispatch.length > 0) {
+          const mins = Math.round(
+            (Date.now() - new Date(recentDispatch[0].departure_time).getTime()) / 60000
+          );
+          console.warn(
+            `[queue] driver ${driverId} re-entered but was dispatched ${mins}m ago ` +
+            `(cooldown ${REQUEUE_COOLDOWN_SECONDS / 60}m) — skipping`
+          );
+          return socket.emit("queue:join:error", {
+            message: `Please wait ${Math.ceil((REQUEUE_COOLDOWN_SECONDS - mins * 60) / 60)} more minute(s) before re-joining the queue.`,
+          });
+        } 
+
         // ---- Resolve bounds_id ----
         let resolvedBoundsId = boundsId;
 
@@ -213,10 +238,10 @@ export function registerDriverHandlers(io, socket) {
               // 2. Write departure log
               const [logResult] = await conn.query(
                 `INSERT INTO departure_logs
-                   (queue_id, driver_info_id, vehicle_id, bounds_id,
-                    departure_time, approved_by, approval_type,
-                    remarks, created_at, zone_id)
-                 VALUES (?, ?, ?, ?, NOW(), NULL, 'AUTO', NULL, NOW(), ?)`,
+                    (queue_id, driver_info_id, vehicle_id, bounds_id,
+                      departure_time, approved_by, approval_type,
+                      remarks, created_at, zone_id)
+                  VALUES (?, ?, ?, ?, NOW(), NULL, 'system', NULL, NOW(), ?)`,
                 [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
               );
 

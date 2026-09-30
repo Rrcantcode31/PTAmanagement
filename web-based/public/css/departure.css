@@ -191,19 +191,44 @@
             border-bottom: 2px solid #eef2f6;
         }
 
+                /* Outer wrapper: stacks heading row + paragraph vertically */
         .section-title {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
+        /* Inner heading row: icon + text side by side */
+        .section-title-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             font-size: 1.6rem;
             font-weight: 700;
             color: #2c3e3b;
             letter-spacing: -0.3px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
 
-        .section-title i {
+        .section-title-heading i {
             color: #43aca1;
             font-size: 1.7rem;
+        }
+
+        .section-title p {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 16px;
+            color: #6b7280;
+            margin: 0;
+            line-height: 1.3;
+        }
+
+        .logs-panel p {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 16px;
+            color: #6b7280;
+            margin: 0;
+            line-height: 1.3; 
         }
 
         .route-selector select {
@@ -321,6 +346,254 @@
             text-align: center;
             padding: 56px 20px;
             color: #6b7b7e;
+        }
+                /* ==================================================
+        DEPARTURE TABLE
+        ================================================== */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 16px;
+            background: #ffffff;
+            border: 1px solid #eef2f6;
+        }
+
+        .departure-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 14px;
+        }
+
+        /* Header row */
+        .departure-table thead th {
+            text-align: left;
+            padding: 16px 20px;
+            background: #f1f9f7;
+            color: #1f5e55;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #e2efec;
+            white-space: nowrap;
+        }
+
+        .departure-table thead th:first-child { border-top-left-radius: 16px; }
+        .departure-table thead th:last-child  { border-top-right-radius: 16px; }
+
+        /* Data rows */
+        .departure-table tbody tr {
+            transition: background 0.15s ease;
+        }
+
+        .departure-table tbody tr:hover {
+            background: #f7fbfa;
+        }
+
+        .departure-table tbody td {
+            padding: 16px 20px;
+            border-bottom: 1px solid #eef2f6;
+            color: #2d3e3b;
+            font-weight: 500;
+            font-size: 13.5px;
+            vertical-align: middle;
+        }
+
+        .departure-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Column-specific styling */
+
+        /* #1 — Log ID */
+        .col-id {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            color: #1f5e55;
+            font-variant-numeric: tabular-nums;
+            width: 80px;
+        }
+
+        /* ABC 1234 — Plate */
+        .col-plate {
+            font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+            font-weight: 700;
+            color: #319086;
+            letter-spacing: 0.3px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        /* Juan Dela Cruz — Driver */
+        .col-driver {
+            color: #1f3d38;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* Koronadal City → Banga — Route */
+        .col-route {
+            color: #4a6b65;
+            font-weight: 500;
+            font-size: 13px;
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Badge — Type */
+        .col-type {
+            width: 100px;
+        }
+
+        /* 2026-09-30 / 08:02 AM — Date + Time */
+        .col-date {
+            font-variant-numeric: tabular-nums;
+            color: #2d3e3b;
+            font-weight: 600;
+            font-size: 13px;
+            white-space: nowrap;
+            width: 130px;
+        }
+
+        .time-sub {
+            font-size: 11px;
+            color: #7a8e8a;
+            margin-top: 2px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+
+        /* ==================================================
+        STATUS BADGES
+        ================================================== */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        /* Auto-dispatched (system) */
+        .status-badge.system {
+            background: #e0f2ef;
+            color: #1f6e62;
+        }
+
+        /* Manually dispatched by admin */
+        .status-badge.admin {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        /* Legacy colors kept for compatibility */
+        .status-badge.completed { background: #e0f2e9; color: #2b7a4b; }
+        .status-badge.enroute   { background: #fff0db; color: #c97e00; }
+        .status-badge.delayed   { background: #ffe6e5; color: #c23d2b; }
+
+        /* ==================================================
+        EMPTY / LOADING STATES
+        ================================================== */
+        .loading-row td {
+            text-align: center;
+            padding: 56px 20px;
+            color: #6b7b7e;
+            font-size: 13px;
+        }
+
+        .loading-row i {
+            color: #43aca1;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 48px 20px;
+            color: #9aa6af;
+        }
+
+        .empty-state i {
+            font-size: 32px;
+            margin-bottom: 12px;
+            color: #b8c5c2;
+        }
+
+        .empty-state p {
+            margin: 0;
+            font-size: 13px;
+            font-style: italic;
+            letter-spacing: 0.2px;
+        }
+
+        /* ==================================================
+        LOG STATS BAR
+        ================================================== */
+        .log-stats {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f9fbfd;
+            padding: 14px 20px;
+            border-radius: 60px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 13px;
+            color: #4a6b65;
+            border: 1px solid #eef2f6;
+        }
+
+        .log-stats i {
+            color: #43aca1;
+            margin-right: 6px;
+        }
+
+        #departure-total {
+            font-weight: 700;
+            color: #319086;
+        }
+
+        .refresh-hint {
+            color: #7a8e8a;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .refresh-hint i {
+            color: #43aca1;
+            animation: subtleSpin 3s linear infinite;
+        }
+
+        @keyframes subtleSpin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        /* ==================================================
+        RESPONSIVE
+        ================================================== */
+        @media (max-width: 720px) {
+            .departure-table thead th,
+            .departure-table tbody td {
+                padding: 12px 14px;
+                font-size: 12.5px;
+            }
+
+            .col-route { max-width: 140px; }
+
+            .col-date {
+                width: auto;
+                font-size: 12px;
+            }
         }
 
         @media (max-width: 780px) {

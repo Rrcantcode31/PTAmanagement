@@ -1792,7 +1792,7 @@ exports.getQueueByZone = async (req, res) => {
   try {
     const { zone_id } = req.query;
 
-    const [rows] = await db.promise().query(
+    const [rows] = await dbPool.promise().query(
       `SELECT
          q.queue_id,
          q.queue_status,
@@ -1828,13 +1828,13 @@ exports.getQueueByZone = async (req, res) => {
 
 // POST — admin dispatches the next driver
 exports.dispatchDriver = async (req, res) => {
-  const { queue_id, approval_type = 'MANUAL', remarks = null } = req.body;
+ const { queue_id, approval_type = 'admin', remarks = null } = req.body;
 
   if (!queue_id) {
     return res.status(400).json({ success: false, message: "queue_id required" });
   }
 
-  const conn = await db.promise().getConnection();
+  const conn = await dbPool.promise().getConnection();
   await conn.beginTransaction();
 
   try {
@@ -1908,5 +1908,58 @@ exports.dispatchDriver = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   } finally {
     conn.release();
+  }
+};
+
+// Get departure log
+exports.getDepartureLogs = async (req, res) => {
+  try {
+    const { terminal_id, limit = 200 } = req.query;
+
+    const [rows] = await dbPool.promise().query(
+      `SELECT
+         dl.departure_id,
+         dl.queue_id,
+         dl.driver_info_id,
+         dl.vehicle_id,
+         dl.bounds_id,
+         dl.departure_time,
+         dl.approval_type,
+         dl.approved_by,
+         dl.remarks,
+         dl.created_at,
+         dl.zone_id,
+         d.first_name,
+         d.middle_name,
+         d.last_name,
+         v.plate_number,
+         b.kilometer,
+         b.from_terminal_id,
+         b.to_terminal_id,
+         tf.terminal_name AS from_terminal,
+         tt.terminal_name AS to_terminal,
+         dz.zone_name,
+         dz.terminal_id
+       FROM departure_logs dl
+       LEFT JOIN driver_info d          ON dl.driver_info_id = d.driver_id
+       LEFT JOIN vehicles v             ON dl.vehicle_id     = v.vehicle_id
+       LEFT JOIN terminal_bounds b      ON dl.bounds_id      = b.bounds_id
+       LEFT JOIN terminal_locations tf  ON b.from_terminal_id = tf.terminal_id
+       LEFT JOIN terminal_locations tt  ON b.to_terminal_id   = tt.terminal_id
+       LEFT JOIN dispatch_zones dz      ON dl.zone_id         = dz.zone_id
+       WHERE (? IS NULL OR dz.terminal_id = ?)
+       ORDER BY dl.departure_time DESC
+       LIMIT ?`,
+      [terminal_id || null, terminal_id || null, Number(limit)]
+    );
+
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('getDepartureLogs error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load departure logs',
+      error: err.message,
+    });
   }
 };
