@@ -9,13 +9,13 @@ export function initSocket(server) {
   const io = new Server(server, {
     cors: {
       origin: [
-        "http://localhost:4570",
-        "http://192.168.1.74:4570",
-        "http://localhost:4560",
-        "http://192.168.1.74:4560",
-        "https://ptamanagement-production.up.railway.app",
-        "https://pta-management-4yrprjct.up.railway.app"
-      ],
+      "http://localhost:4570",
+      "http://192.168.1.74:4570",
+      "http://localhost:4560",
+      "http://192.168.1.74:4560",
+      "https://pta-management-admin.up.railway.app",
+       "https://mobile-backend-application.up.railway.app"
+    ],
       credentials: true,
     },
   });

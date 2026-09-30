@@ -1,15 +1,31 @@
 import db from "../config/env.js";
 import { findZoneContainingPoint } from "./helper/geofence.js";
 
+// ============================================================
+// CONFIG
+// ============================================================
 const SLOT_DURATION_MINUTES   = Number(process.env.SLOT_DURATION_MINUTES || 30);
 const DEPARTURE_GRACE_SECONDS = Number(process.env.DEPARTURE_GRACE_SECONDS || 60);
 
 // Koronadal City = the hub terminal that all routes originate from
 const HUB_TERMINAL_ID = Number(process.env.HUB_TERMINAL_ID || 1);
 
-// Module-level, survives socket reconnects
-const pendingDepartureTimers = new Map();
+// How long a driver must remain continuously inside the polygon
+// before we treat it as a genuine entry. Must be > GPS ping interval.
+const REQUIRED_INSIDE_MS = Number(process.env.REQUIRED_INSIDE_MS || 15000);
 
+// Secondary safety net — block re-queue if dispatched within this many seconds.
+const REQUEUE_COOLDOWN_SECONDS = Number(process.env.REQUEUE_COOLDOWN_SECONDS || 60);
+
+// ============================================================
+// MODULE-LEVEL STATE  (survives socket reconnects)
+// ============================================================
+const pendingDepartureTimers = new Map();  // driverId → timer
+const insideSince            = new Map();  // driverId → timestamp inside streak began
+
+// ============================================================
+// HANDLERS
+// ============================================================
 export function registerDriverHandlers(io, socket) {
 
   socket.on("location:update", async ({
@@ -39,15 +55,40 @@ export function registerDriverHandlers(io, socket) {
       // ---------- 3. Geofence ----------
       const matchedZone = await findZoneContainingPoint(terminalId, latitude, longitude);
       const insideZone  = matchedZone !== null;
-      const newStatus   = insideZone ? "ACTIVE" : "INACTIVE";
 
-      await db.promise().query(
-        `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
-        [newStatus, driverId]
-      );
+      // ---------- 4. Sustained-inside tracking ----------
+      if (insideZone) {
+        if (!insideSince.has(driverId)) {
+          insideSince.set(driverId, Date.now());
+        }
+      } else {
+        insideSince.delete(driverId);
+      }
+
+      const sustainedInsideMs = insideSince.has(driverId)
+        ? Date.now() - insideSince.get(driverId)
+        : 0;
+      const sustainedInside = sustainedInsideMs >= REQUIRED_INSIDE_MS;
+
+      // ---------- 5. Debounced status decision ----------
+      let newStatus;
+      if (!insideZone) {
+        newStatus = "INACTIVE";
+      } else if (sustainedInside || previousStatus === "ACTIVE") {
+        newStatus = "ACTIVE";
+      } else {
+        newStatus = "INACTIVE";
+      }
+
+      if (newStatus !== previousStatus) {
+        await db.promise().query(
+          `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
+          [newStatus, driverId]
+        );
+      }
 
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
-      const justLeft    = previousStatus === "ACTIVE" && newStatus !== "ACTIVE";
+      const justLeft    = previousStatus === "ACTIVE" && newStatus === "INACTIVE";
 
       // ==================================================
       // ENTER: auto-join the queue
@@ -61,11 +102,12 @@ export function registerDriverHandlers(io, socket) {
           console.log(`[queue] cancelled pending departure for driver ${driverId}`);
         }
 
+        // ---- Cooldown check: block re-queue shortly after dispatch ----
         const cooldownTime = new Date(Date.now() - REQUEUE_COOLDOWN_SECONDS * 1000);
 
         const [recentDispatch] = await db.promise().query(
           `SELECT departure_id, departure_time
-            FROM departure_logs
+             FROM departure_logs
             WHERE driver_info_id = ?
               AND departure_time > ?
             ORDER BY departure_time DESC
@@ -74,17 +116,17 @@ export function registerDriverHandlers(io, socket) {
         );
 
         if (recentDispatch.length > 0) {
-          const mins = Math.round(
+          const minsAgo = Math.round(
             (Date.now() - new Date(recentDispatch[0].departure_time).getTime()) / 60000
           );
           console.warn(
-            `[queue] driver ${driverId} re-entered but was dispatched ${mins}m ago ` +
+            `[queue] driver ${driverId} re-entered but was dispatched ${minsAgo}m ago ` +
             `(cooldown ${REQUEUE_COOLDOWN_SECONDS / 60}m) — skipping`
           );
           return socket.emit("queue:join:error", {
-            message: `Please wait ${Math.ceil((REQUEUE_COOLDOWN_SECONDS - mins * 60) / 60)} more minute(s) before re-joining the queue.`,
+            message: `Please wait before re-joining the queue.`,
           });
-        } 
+        }
 
         // ---- Resolve bounds_id ----
         let resolvedBoundsId = boundsId;
@@ -111,7 +153,7 @@ export function registerDriverHandlers(io, socket) {
           });
         }
 
-        // Skip if already WAITING or QUEUED
+        // ---- Skip if already WAITING or QUEUED ----
         const [existingRows] = await db.promise().query(
           `SELECT queue_id FROM vehicle_queue
             WHERE driver_info_id = ?
@@ -121,7 +163,7 @@ export function registerDriverHandlers(io, socket) {
         );
         if (existingRows.length > 0) return;
 
-        // ---- Decide starting status: WAITING if group is empty, else QUEUED ----
+        // ---- Decide starting status ----
         const [waitingCount] = await db.promise().query(
           `SELECT COUNT(*) AS n
              FROM vehicle_queue
@@ -199,7 +241,6 @@ export function registerDriverHandlers(io, socket) {
             await conn.beginTransaction();
 
             try {
-              // Re-check: still outside?
               const [checkRows] = await conn.query(
                 `SELECT status FROM driverauth WHERE driver_id = ?`,
                 [driverId]
@@ -212,7 +253,6 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
-              // Still WAITING?
               const [stillWaiting] = await conn.query(
                 `SELECT queue_id, bounds_id, vehicle_id, zone_id
                    FROM vehicle_queue
@@ -227,7 +267,6 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
-              // 1. Mark as DISPATCHED
               await conn.query(
                 `UPDATE vehicle_queue
                     SET queue_status = 'DISPATCHED', served_at = NOW()
@@ -235,7 +274,6 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id]
               );
 
-              // 2. Write departure log
               const [logResult] = await conn.query(
                 `INSERT INTO departure_logs
                     (queue_id, driver_info_id, vehicle_id, bounds_id,
@@ -245,7 +283,6 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
               );
 
-              // 3. Promote the next QUEUED to WAITING
               const [nextInLine] = await conn.query(
                 `SELECT queue_id FROM vehicle_queue
                   WHERE queue_status = 'QUEUED'
@@ -299,9 +336,10 @@ export function registerDriverHandlers(io, socket) {
           }, DEPARTURE_GRACE_SECONDS * 1000);
 
           pendingDepartureTimers.set(driverId, timer);
-          console.log(`[queue] driver ${driverId} (#1) left — dispatching in ${DEPARTURE_GRACE_SECONDS}s`);
+          console.log(
+            `[queue] driver ${driverId} (#1) left — dispatching in ${DEPARTURE_GRACE_SECONDS}s`
+          );
         } else {
-          // Driver leaving but not WAITING — could be QUEUED, just log
           console.log(`[queue] driver ${driverId} left but was not WAITING — no dispatch`);
         }
       }
@@ -316,6 +354,7 @@ export function registerDriverHandlers(io, socket) {
 
     } catch (err) {
       console.error("[queue] location:update FAILED:", err.message, err.code);
+      console.error(err.stack);
     }
   });
 }

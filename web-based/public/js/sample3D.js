@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const DELETE_DISPATCH_ZONE_API = '/deleteDispatchAreaZone';
   const GET_TERMINALS_API        = '/terminals';
 
-  const SOCKET_URL = 'http://192.168.1.74:4570';
+  const SOCKET_URL = 'https://mobile-backend-application.up.railway.app';
 
   // Koronadal City is the hub — never offered as a zone assignment target
   const HUB_TERMINAL_ID = 1;
