@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 
-// Login  for driver and commuter
+// Login for driver and commuter
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -37,22 +37,27 @@ export const login = async (req, res) => {
     if (users.length > 0) {
       account = users[0];
     } else {
-      // ================= STEP 2: CHECK DRIVERAUTH =================
+
       const [drivers] = await db.promise().query(
-        `SELECT 
-            d.driver_id AS id,
-            d.email,
-            d.password,
-            r.role_name,
-            di.first_name,
-            di.last_name,
-            'driver' AS type
-         FROM driverauth d
-         JOIN roles r ON d.role_id = r.role_id
-         LEFT JOIN driver_info di ON d.driver_id = di.driver_id
-         WHERE d.email = ?`,
-        [email]
-      );
+          `SELECT 
+              d.driver_id AS id,
+              d.email,
+              d.password,
+              r.role_name,
+              di.first_name,
+              di.last_name,
+              di.terminal_id,
+              tl.terminal_name,
+              tl.latitude,
+              tl.longitude,
+              'driver' AS type
+          FROM driverauth d
+          JOIN roles r ON d.role_id = r.role_id
+          LEFT JOIN driver_info di         ON d.driver_id    = di.driver_id
+          LEFT JOIN terminal_locations tl  ON di.terminal_id = tl.terminal_id
+          WHERE d.email = ?`,
+          [email]
+        );
 
       if (drivers.length > 0) {
         account = drivers[0];
@@ -85,7 +90,7 @@ export const login = async (req, res) => {
       {
         id: account.id,
         role: account.role_name,
-        type: account.type, // 🔥 important (user or driver)
+        type: account.type,
       },
       process.env.TOKEN_PASSWORD,
       { expiresIn: process.env.TOKEN_EXPIRATION || "90d" }
@@ -97,13 +102,19 @@ export const login = async (req, res) => {
       message: "Login successful",
       token,
       user: {
-        id: account.id,
-        email: account.email,
-        firstName: account.first_name,
-        lastName: account.last_name,
-        role: account.role_name, // from roles table
-        type: account.type,      // 'user' or 'driver'
-      },
+          id: account.id,
+          email: account.email,
+          firstName: account.first_name,
+          lastName: account.last_name,
+          role: account.role_name,
+          type: account.type,
+
+          // Driver-only fields (null for commuters)
+          terminal_id:      account.terminal_id      ?? null,
+          terminal_name:    account.terminal_name    ?? null,
+          terminal_lat:     account.latitude  != null ? Number(account.latitude)  : null,
+          terminal_lng:     account.longitude != null ? Number(account.longitude) : null,
+        },
     });
 
   } catch (error) {
@@ -340,5 +351,139 @@ export const getFarePrices = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch fare prices' });
+  }
+};
+
+export const getDriverQueue = async (req, res) => {
+  try {
+    const { driver_id } = req.query;
+    if (!driver_id) {
+      return res.status(400).json({ success: false, message: "driver_id required" });
+    }
+
+    const HUB_TERMINAL_ID = 1; // Koronadal
+
+    // ---- 1. Driver + vehicle info ----
+    const [driverRows] = await db.promise().query(
+      `SELECT
+         d.driver_id,
+         d.terminal_id,
+         d.vehicle_id,
+         d.first_name, d.middle_name, d.last_name,
+         v.plate_number,
+         vt.type_name AS vehicle_type
+       FROM driver_info d
+       LEFT JOIN vehicles v       ON d.vehicle_id = v.vehicle_id
+       LEFT JOIN vehicle_types vt ON v.type_id    = vt.type_id
+       WHERE d.driver_id = ?`,
+      [driver_id]
+    );
+
+    if (driverRows.length === 0) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
+
+    const driver = driverRows[0];
+
+    // ---- 2. Route for the driver's terminal ----
+    let route = null;
+    if (driver.terminal_id && driver.terminal_id !== HUB_TERMINAL_ID) {
+      const [routeRows] = await db.promise().query(
+        `SELECT
+           b.bounds_id,
+           b.kilometer,
+           tf.terminal_id   AS from_id,
+           tf.terminal_name AS from_name,
+           tf.latitude      AS from_lat,
+           tf.longitude     AS from_lng,
+           tt.terminal_id   AS to_id,
+           tt.terminal_name AS to_name,
+           tt.latitude      AS to_lat,
+           tt.longitude     AS to_lng
+         FROM terminal_bounds b
+         LEFT JOIN terminal_locations tf ON b.from_terminal_id = tf.terminal_id
+         LEFT JOIN terminal_locations tt ON b.to_terminal_id   = tt.terminal_id
+         WHERE (b.from_terminal_id = ? AND b.to_terminal_id = ?)
+            OR (b.from_terminal_id = ? AND b.to_terminal_id = ?)
+         LIMIT 1`,
+        [driver.terminal_id, HUB_TERMINAL_ID, HUB_TERMINAL_ID, driver.terminal_id]
+      );
+      route = routeRows[0] || null;
+    }
+
+    // ---- 3. Queue at the driver's terminal ----
+    const [queueRows] = await db.promise().query(
+      `SELECT
+         q.queue_id,
+         q.driver_info_id AS driver_id,
+         q.queue_status,
+         ROW_NUMBER() OVER (
+           ORDER BY
+             CASE q.queue_status WHEN 'WAITING' THEN 0 ELSE 1 END,
+             q.scheduled_dispatch_at ASC,
+             q.joined_at ASC
+         ) AS queue_position,
+         d.first_name, d.middle_name, d.last_name,
+         v.plate_number,
+         vt.type_name AS vehicle_type
+       FROM vehicle_queue q
+       JOIN driver_info d        ON q.driver_info_id = d.driver_id
+       JOIN vehicles v           ON q.vehicle_id     = v.vehicle_id
+       LEFT JOIN vehicle_types vt ON v.type_id       = vt.type_id
+       LEFT JOIN dispatch_zones dz ON q.zone_id      = dz.zone_id
+       WHERE q.queue_status IN ('WAITING', 'QUEUED')
+         AND (
+           dz.terminal_id = ?
+           OR (? IS NOT NULL AND q.bounds_id = ?)
+         )
+       ORDER BY queue_position ASC`,
+      [
+        driver.terminal_id,
+        route?.bounds_id ?? null,
+        route?.bounds_id ?? null,
+      ]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        driver: {
+          driver_id:    driver.driver_id,
+          driver_name:  [driver.first_name, driver.middle_name, driver.last_name]
+            .filter(Boolean).join(" "),
+          plate_number: driver.plate_number,
+          vehicle_type: driver.vehicle_type,
+          terminal_id:  driver.terminal_id,
+        },
+        route: route ? {
+          bounds_id: route.bounds_id,
+          kilometer: route.kilometer,
+          from: {
+            id:   route.from_id,
+            name: route.from_name,
+            lat:  Number(route.from_lat),
+            lng:  Number(route.from_lng),
+          },
+          to: {
+            id:   route.to_id,
+            name: route.to_name,
+            lat:  Number(route.to_lat),
+            lng:  Number(route.to_lng),
+          },
+        } : null,
+        queue: queueRows.map(q => ({
+          queue_id:       q.queue_id,
+          driver_id:      q.driver_id,
+          driver_name:    [q.first_name, q.middle_name, q.last_name].filter(Boolean).join(" "),
+          plate_number:   q.plate_number,
+          vehicle_type:   q.vehicle_type,
+          queue_position: q.queue_position,
+          queue_status:   q.queue_status,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("getDriverQueue error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };

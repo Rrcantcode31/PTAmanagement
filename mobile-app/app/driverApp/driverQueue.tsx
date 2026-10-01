@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,15 +7,15 @@ import {
   Animated,
   Dimensions,
   Pressable,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { usePathname } from "expo-router";
 import { WebView } from "react-native-webview";
-import { BlurView } from "expo-blur";
+import { BlurView, BlurTargetView } from "expo-blur";
 import GridNavButton from "../components/GridNavButton";
+import { useAuth } from "../../appContext/authContext";  // ← adjust path if needed
 
 const { height: H } = Dimensions.get("window");
 
@@ -30,39 +30,64 @@ type QueueItem = {
   queue_status: "WAITING" | "QUEUED";
 };
 
-// ---------- Placeholder data ----------
-const FALLBACK_QUEUE: QueueItem[] = [
-  { queue_id: 1, driver_id: 12, plate_number: "KGA-1234", driver_name: "Ramon Dela Cruz",    vehicle_type: "Van",         queue_position: 1, queue_status: "WAITING" },
-  { queue_id: 2, driver_id: 9,  plate_number: "KGA-5678", driver_name: "Maria Santos",       vehicle_type: "Van",         queue_position: 2, queue_status: "QUEUED"  },
-  { queue_id: 3, driver_id: 10, plate_number: "KGA-9101", driver_name: "Jake Sarmiento",     vehicle_type: "Minibus",     queue_position: 3, queue_status: "QUEUED"  },
-  { queue_id: 4, driver_id: 11, plate_number: "KGA-1122", driver_name: "Luzviminda Ortigas", vehicle_type: "Van",         queue_position: 4, queue_status: "QUEUED"  },
-  { queue_id: 5, driver_id: 13, plate_number: "KGA-3344", driver_name: "Edwin Magbanua",     vehicle_type: "Modern Jeep", queue_position: 5, queue_status: "QUEUED"  },
-];
-
-const CURRENT_DRIVER_ID = 9;
-
-const TERMINAL = {
-  latitude: 6.406392585980692,
-  longitude: 124.80452341672029,
-  name: "Koronadal Terminal",
+type RouteEndpoint = {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
 };
 
+type RouteData = {
+  bounds_id: number | null;
+  kilometer: number | null;
+  from: RouteEndpoint;
+  to: RouteEndpoint;
+} | null;
+
+type DriverData = {
+  driver_id: number;
+  driver_name: string;
+  plate_number: string;
+  vehicle_type: string;
+  terminal_id: number;
+};
+
+type DriverQueueResponse = {
+  driver: DriverData;
+  route: RouteData;
+  queue: QueueItem[];
+};
+
+// ---------- Config ----------
+const API_URL = "/driverQueue";
+
+// Koronadal hub fallback
+const HUB_FALLBACK = { lat: 6.48409, lng: 124.85211, name: "Koronadal City" };
+
 // ---------- Panel heights ----------
-const COLLAPSED_H = 175;
+const COLLAPSED_H = 245;
 const EXPANDED_H  = H * 0.85;
 
 // ============================================================
 // Leaflet HTML builder
 // ============================================================
-function buildLeafletHTML(queue: QueueItem[]): string {
-  const markers = queue.map((q) => ({
-    lat: TERMINAL.latitude  + (Math.random() - 0.5) * 0.0018,
-    lng: TERMINAL.longitude + (Math.random() - 0.5) * 0.0018,
-    label: `${q.driver_name} • #${q.queue_position}`,
-    plate: q.plate_number,
-    status: q.queue_status,
-    isMe: q.driver_id === CURRENT_DRIVER_ID,
-  }));
+function buildLeafletHTML(
+  myTerminalLat: number | null,
+  myTerminalLng: number | null,
+  myTerminalName: string | null,
+): string {
+  // Koronadal hub — coordinates from terminal_locations (terminal_id = 1)
+  const HUB = { lat: 6.484090, lng: 124.852111, name: "Koronadal City" };
+
+  const hasMyTerminal = myTerminalLat != null && myTerminalLng != null;
+
+  // Center between the two terminals when both are known
+  const center = hasMyTerminal
+    ? {
+        lat: (myTerminalLat + HUB.lat) / 2,
+        lng: (myTerminalLng + HUB.lng) / 2,
+      }
+    : { lat: HUB.lat, lng: HUB.lng };
 
   return `
 <!DOCTYPE html>
@@ -74,18 +99,19 @@ function buildLeafletHTML(queue: QueueItem[]): string {
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; background: #e9efe9; }
     .leaflet-control-attribution { font-size: 9px; }
-    .terminal-dot {
-      width: 20px; height: 20px; border-radius: 50%;
-      background: #2c7a6e; border: 3px solid #fff;
+    .hub-dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #e74c3c; border: 3px solid #fff;
       box-shadow: 0 2px 8px rgba(0,0,0,0.35);
     }
-    .driver-dot {
-      width: 16px; height: 16px; border-radius: 50%;
-      background: #7eb6f2; border: 2px solid #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    .my-pin { width: 28px; height: 40px; }
+    .my-pin svg { width: 100%; height: 100%; }
+    .leaflet-popup-content {
+      margin: 8px 12px;
+      font-family: sans-serif;
+      font-size: 13px;
+      font-weight: 600;
     }
-    .driver-dot.me { background: #2c7a6e; }
-    .driver-dot.first { background: #D85A30; }
   </style>
 </head>
 <body>
@@ -96,38 +122,78 @@ function buildLeafletHTML(queue: QueueItem[]): string {
     const map = L.map('map', {
       zoomControl: false,
       attributionControl: true,
-    }).setView([${TERMINAL.latitude}, ${TERMINAL.longitude}], 18);
+    }).setView([${center.lat}, ${center.lng}], 11);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      minZoom: 10,
+      maxZoom: 13,
       attribution: '&copy; OpenStreetMap',
     }).addTo(map);
 
-    L.marker([${TERMINAL.latitude}, ${TERMINAL.longitude}], {
+    const myLat   = ${myTerminalLat ?? 'null'};
+    const myLng   = ${myTerminalLng ?? 'null'};
+    const myName  = ${JSON.stringify(myTerminalName || 'Your terminal')};
+    const hubLat  = ${HUB.lat};
+    const hubLng  = ${HUB.lng};
+    const hubName = ${JSON.stringify(HUB.name)};
+
+    // -------- Red dot at hub (Koronadal) --------
+    L.marker([hubLat, hubLng], {
       icon: L.divIcon({
         className: '',
-        html: '<div class="terminal-dot"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        html: '<div class="hub-dot"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
       }),
-    }).addTo(map).bindPopup(${JSON.stringify(TERMINAL.name)});
+    }).addTo(map).bindPopup(hubName);
 
-    const drivers = ${JSON.stringify(markers)};
-
-    drivers.forEach(function (d) {
-      const cls = d.isMe ? 'me' : (d.status === 'WAITING' ? 'first' : '');
-
-      L.marker([d.lat, d.lng], {
+    // -------- Blue pin + open popup at the driver's terminal --------
+    if (myLat != null && myLng != null) {
+      L.marker([myLat, myLng], {
         icon: L.divIcon({
           className: '',
-          html: '<div class="driver-dot ' + cls + '"></div>',
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
+          html:
+            '<div class="my-pin">' +
+              '<svg viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">' +
+                '<path d="M12 0C5.4 0 0 5.4 0 12c0 8.4 12 24 12 24s12-15.6 12-24C24 5.4 18.6 0 12 0z" ' +
+                'fill="#2a7be4" stroke="#fff" stroke-width="2"/>' +
+                '<circle cx="12" cy="12" r="4.5" fill="#fff"/>' +
+              '</svg>' +
+            '</div>',
+          iconSize: [28, 40],
+          iconAnchor: [14, 40],
+          popupAnchor: [0, -36],
         }),
-      }).addTo(map).bindPopup(
-        '<b>' + d.label + '</b><br>' + d.plate
-      );
-    });
+      })
+        .addTo(map)
+        .bindPopup(myName)
+        .openPopup();
+
+      // -------- Road route between driver terminal and hub (OSRM) --------
+      const osrmUrl =
+        'https://router.project-osrm.org/route/v1/driving/' +
+        myLng + ',' + myLat + ';' +
+        hubLng + ',' + hubLat +
+        '?overview=full&geometries=geojson';
+
+      fetch(osrmUrl)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.routes && data.routes[0]) {
+            const coords = data.routes[0].geometry.coordinates.map(function (c) {
+              return [c[1], c[0]];
+            });
+            const line = L.polyline(coords, {
+              color: '#e74c3c',
+              weight: 5,
+              opacity: 0.9,
+            }).addTo(map);
+
+            map.fitBounds(line.getBounds(), { padding: [70, 70] });
+          }
+        })
+        .catch(function (err) { console.error('OSRM error:', err); });
+    }
   </script>
 </body>
 </html>
@@ -139,10 +205,44 @@ function buildLeafletHTML(queue: QueueItem[]): string {
 // ============================================================
 export default function DriverQueue() {
   const pathname = usePathname();
-  const [queue] = useState<QueueItem[]>(FALLBACK_QUEUE);
+  const { user } = useAuth();   // ← driver from auth context
+
+  const [queue, setQueue]   = useState<QueueItem[]>([]);
+  const [route, setRoute]   = useState<RouteData>(null);
+  const [driver, setDriver] = useState<DriverData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
   const panelHeight = useRef(new Animated.Value(COLLAPSED_H)).current;
+  const mapTargetRef = useRef(null);
+
+  // ---- Fetch queue + route when we know the driver id ----
+  useEffect(() => {
+    if (!user?.id) return;   // wait for auth to hydrate
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}?driver_id=${user.id}`,
+          { credentials: "include" }
+        );
+        const json: { success: boolean; data?: DriverQueueResponse; message?: string } =
+          await res.json();
+
+        if (!json.success || !json.data) {
+          throw new Error(json.message || "Failed to load queue");
+        }
+
+        setDriver(json.data.driver);
+        setRoute(json.data.route);
+        setQueue(json.data.queue);
+      } catch (err) {
+        console.error("driverQueue fetch failed:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user?.id]);
 
   const toggleExpanded = () => {
     const to = expanded ? COLLAPSED_H : EXPANDED_H;
@@ -165,18 +265,28 @@ export default function DriverQueue() {
   if (!fontsLoaded) return null;
 
   const firstInQueue = queue.find((q) => q.queue_position === 1) || null;
-  const me = queue.find((q) => q.driver_id === CURRENT_DRIVER_ID) || null;
+  const me           = queue.find((q) => q.driver_id === user?.id) || null;
 
-  const leafletHTML = buildLeafletHTML(queue);
+  // Route subtitle — falls back to the driver's own terminal
+  const routeLabel = route
+    ? `Route: ${route.from.name} ↔ ${route.to.name}`
+    : user?.terminal_name
+      ? `Terminal: ${user.terminal_name}`
+      : "Route: —";
+
+  // Build the map — uses the terminal coords from auth as fallback
+  const leafletHTML = buildLeafletHTML(
+  user?.terminal_lat ?? null,
+  user?.terminal_lng ?? null,
+  user?.terminal_name ?? null,
+);
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <View style={styles.root}>
 
-        {/* ============================================================
-            FULL-SCREEN LEAFLET MAP (WebView)
-        ============================================================ */}
-        <View style={StyleSheet.absoluteFill}>
+        {/* FULL-SCREEN LEAFLET MAP */}
+        <BlurTargetView ref={mapTargetRef} style={StyleSheet.absoluteFill}>
           <WebView
             originWhitelist={["*"]}
             source={{ html: leafletHTML }}
@@ -187,26 +297,27 @@ export default function DriverQueue() {
             bounces={false}
             overScrollMode="never"
           />
-        </View>
+        </BlurTargetView>
 
-        {/* ============================================================
-            EXPANDABLE TOP PANEL WITH BLUR
-        ============================================================ */}
+        {/* EXPANDABLE TOP PANEL WITH BLUR */}
         <Animated.View style={[styles.panel, { height: panelHeight }]}>
-          {/* Blurred backdrop — sits between the map and the content */}
           <BlurView
-              intensity={100}
-              tint="light"
-              blurMethod="dimezisBlurView"
-              style={StyleSheet.absoluteFill}
-            />
+            intensity={100}
+            tint="light"
+            blurMethod="dimezisBlurView"
+            blurTarget={mapTargetRef}
+            style={StyleSheet.absoluteFill}
+          />
 
-          {/* Content on top of the blur */}
           <View style={styles.panelContent}>
+
+            <View style={styles.pageHeader}>
+              <Text style={styles.pageTitle}>Driver Queueing</Text>
+              <Text style={styles.pageSubtitle}>{routeLabel}</Text>
+            </View>
+
             {!expanded ? (
-              /* ---------------- COLLAPSED VIEW ---------------- */
               <Pressable onPress={toggleExpanded} style={{ flex: 1 }}>
-                {/* Card 1 — 1st in queue */}
                 <View style={styles.cardFirst}>
                   <View style={styles.cardFirstLeft}>
                     <Text style={styles.cardLabelLight}>1ST IN QUEUE</Text>
@@ -222,15 +333,14 @@ export default function DriverQueue() {
                   </View>
                 </View>
 
-                {/* Card 2 — my position */}
                 <View style={[styles.cardMe, !me && styles.cardMeInactive]}>
                   <View style={styles.cardMeLeft}>
                     <Text style={styles.cardLabelBlue}>YOUR POSITION</Text>
                     <Text style={styles.cardNameDark}>
-                      {me ? me.driver_name : "Not in queue"}
+                      {me ? me.driver_name : driver ? driver.driver_name : "Not in queue"}
                     </Text>
                     <Text style={styles.cardPlateDark}>
-                      {me ? me.plate_number : "—"}
+                      {me ? me.plate_number : driver ? driver.plate_number : "—"}
                     </Text>
                   </View>
                   <View style={styles.mePositionBadge}>
@@ -252,7 +362,6 @@ export default function DriverQueue() {
                 </View>
               </Pressable>
             ) : (
-              /* ---------------- EXPANDED VIEW ---------------- */
               <View style={{ flex: 1 }}>
                 <ScrollView
                   style={{ flex: 1 }}
@@ -265,7 +374,7 @@ export default function DriverQueue() {
                   </View>
 
                   {queue.map((item, idx) => {
-                    const isMe = item.driver_id === CURRENT_DRIVER_ID;
+                    const isMe = item.driver_id === user?.id;
                     return (
                       <View
                         key={item.queue_id}
@@ -278,7 +387,6 @@ export default function DriverQueue() {
                             color={isMe ? "#fff" : "#5c7e76"}
                           />
                         </View>
-
                         <View style={{ flex: 1 }}>
                           <Text style={styles.plate}>{item.plate_number}</Text>
                           <Text style={styles.name}>
@@ -287,7 +395,6 @@ export default function DriverQueue() {
                           </Text>
                           <Text style={styles.vType}>{item.vehicle_type}</Text>
                         </View>
-
                         <View style={styles.rightCol}>
                           <View
                             style={[
@@ -295,9 +402,7 @@ export default function DriverQueue() {
                               idx === 0 && styles.posBadgeFirst,
                             ]}
                           >
-                            <Text style={styles.posText}>
-                              #{item.queue_position}
-                            </Text>
+                            <Text style={styles.posText}>#{item.queue_position}</Text>
                           </View>
                           <Text
                             style={[
@@ -323,9 +428,7 @@ export default function DriverQueue() {
           </View>
         </Animated.View>
 
-        {/* ============================================================
-            BOTTOM NAV
-        ============================================================ */}
+        {/* BOTTOM NAV */}
         <View style={styles.row}>
           <GridNavButton title="Dashboard"   route="./driverDashboard"  icon="view-dashboard-outline" />
           <GridNavButton title="Map routes"  route="./driverRoute"      icon="map-marker-path" />
@@ -339,59 +442,49 @@ export default function DriverQueue() {
   );
 }
 
+// ---------- styles unchanged ----------
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#2c7a6e" },
+  safeArea: { flex: 1 },
   root: { flex: 1, backgroundColor: "#e9efe9" },
 
-  // ============================================================
-  // Panel — outer container (handles height animation, rounding,
-  // shadow). No backgroundColor — BlurView provides the backdrop.
-  // ============================================================
   panel: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: "hidden",
     zIndex: 10,
     backgroundColor: "transparent",
-    shadowColor: "#ece4e4c1",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 14,
     elevation: 10,
-
-    // Fallback for Android < 12 (no native blur support) —
-    // semi-transparent white so the panel is still readable.
-    
   },
-
-  // Content layer on top of the blur
   panelContent: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 16,
     paddingBottom: 6,
   },
 
-  // ============================================================
-  // Card 1 — 1st in queue
-  // ============================================================
+  pageHeader: { marginBottom: 14, paddingHorizontal: 4 },
+  pageTitle: {
+    fontSize: 22, fontFamily: "monsterrat_kp",
+    color: "#1a1a1a", marginBottom: 2,
+  },
+  pageSubtitle: {
+    fontSize: 12, fontFamily: "monster_act", color: "#5c7e76",
+  },
+
   cardFirst: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2c7a6e",
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#2c7a6e", borderRadius: 16,
+    paddingVertical: 12, paddingHorizontal: 14,
     marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowOpacity: 0.14, shadowRadius: 5, elevation: 3,
   },
   cardFirstLeft: { flex: 1 },
   cardLabelLight: {
@@ -410,9 +503,6 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
 
-  // ============================================================
-  // Card 2 — my position
-  // ============================================================
   cardMe: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#d7ebff", borderRadius: 16,
@@ -447,17 +537,11 @@ const styles = StyleSheet.create({
     color: "#2c7a6e", marginTop: 1,
   },
 
-  // ============================================================
-  // Drag handle
-  // ============================================================
   handleWrap: { alignItems: "center", paddingVertical: 10 },
   handle: {
     width: 42, height: 4, borderRadius: 2, backgroundColor: "#c8d4d0",
   },
 
-  // ============================================================
-  // Expanded list
-  // ============================================================
   listContent: { paddingTop: 6, paddingBottom: 10 },
   listHeader: {
     flexDirection: "row", justifyContent: "space-between",
@@ -500,9 +584,6 @@ const styles = StyleSheet.create({
   statusReady: { backgroundColor: "#e0f2e9", color: "#1e6f4c" },
   statusOther: { backgroundColor: "#fff0db", color: "#c97e00" },
 
-  // ============================================================
-  // Bottom nav
-  // ============================================================
   row: {
     position: "absolute", bottom: 25, width: "90%", alignSelf: "center",
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

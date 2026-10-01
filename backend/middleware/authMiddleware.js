@@ -1,9 +1,8 @@
-import jwToken from "jsonwebtoken";
-
+import jwt from "jsonwebtoken";
 
 // verifyToken — is there a valid JWT?
 export const verifyToken = (req, res, next) => {
-    const header = req.headers.authorization;
+  const header = req.headers.authorization;
 
   if (!header || !header.startsWith("Bearer ")) {
     return res.status(401).json({
@@ -24,7 +23,7 @@ export const verifyToken = (req, res, next) => {
   }
 };
 
-// requireType — 'driver' or 'user'
+
 export const requireType = (...allowedTypes) => (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: "Not authenticated" });
