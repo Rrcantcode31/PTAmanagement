@@ -60,8 +60,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "37b5cc76-98c1-42e4-81b3-8407d8d037f1"
+        "projectId": "8b15f17e-5260-4098-8a50-b7fef0cc38d0"
       }
-    }
+    },
+    "owner": "rrr31s-team"
   }
 }
