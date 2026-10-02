@@ -14,6 +14,10 @@ const HUB_TERMINAL_ID = Number(process.env.HUB_TERMINAL_ID || 1);
 // before we treat it as a genuine entry. Must be > GPS ping interval.
 const REQUIRED_INSIDE_MS = Number(process.env.REQUIRED_INSIDE_MS || 15000);
 
+// How long a driver must remain continuously OUTSIDE the polygon before
+// we treat it as a genuine departure. Blocks GPS-jitter false dispatches.
+const REQUIRED_OUTSIDE_MS = Number(process.env.REQUIRED_OUTSIDE_MS || 45000);
+
 // Secondary safety net — block re-queue if dispatched within this many seconds.
 const REQUEUE_COOLDOWN_SECONDS = Number(process.env.REQUEUE_COOLDOWN_SECONDS || 60);
 
@@ -22,6 +26,7 @@ const REQUEUE_COOLDOWN_SECONDS = Number(process.env.REQUEUE_COOLDOWN_SECONDS || 
 // ============================================================
 const pendingDepartureTimers = new Map();  // driverId → timer
 const insideSince            = new Map();  // driverId → timestamp inside streak began
+const outsideSince           = new Map();  // driverId → timestamp outside streak began
 
 // ============================================================
 // HANDLERS
@@ -70,6 +75,20 @@ export function registerDriverHandlers(io, socket) {
         : 0;
       const sustainedInside = sustainedInsideMs >= REQUIRED_INSIDE_MS;
 
+      // ---------- 4b. Sustained-outside tracking ----------
+      if (!insideZone) {
+        if (!outsideSince.has(driverId)) {
+          outsideSince.set(driverId, Date.now());
+        }
+      } else {
+        outsideSince.delete(driverId);
+      }
+
+      const sustainedOutsideMs = outsideSince.has(driverId)
+        ? Date.now() - outsideSince.get(driverId)
+        : 0;
+      const sustainedOutside = sustainedOutsideMs >= REQUIRED_OUTSIDE_MS;
+
       // ---------- 5. Debounced status decision ----------
       // OUTSIDE                     → INACTIVE immediately
       // INSIDE + sustained          → ACTIVE
@@ -92,12 +111,18 @@ export function registerDriverHandlers(io, socket) {
       }
 
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
-      const justLeft    = previousStatus === "ACTIVE" && newStatus === "INACTIVE";
+      const justLeft =
+        previousStatus === "ACTIVE" &&
+        newStatus === "INACTIVE" &&
+        sustainedOutside;
 
       // ==================================================
       // ENTER: auto-join the queue
       // ==================================================
       if (justEntered && vehicleId) {
+
+        // Reset the outside streak — driver is back inside
+        outsideSince.delete(driverId);
 
         // Cancel any pending departure — they came back
         if (pendingDepartureTimers.has(driverId)) {

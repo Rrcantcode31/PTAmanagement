@@ -487,3 +487,86 @@ export const getDriverQueue = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Terminal queue + route (for commuter-facing map)
+export const getTerminalQueue = async (req, res) => {
+  try {
+    const { terminal_id } = req.query;
+    if (!terminal_id) {
+      return res.status(400).json({ success: false, message: "terminal_id required" });
+    }
+
+    const HUB_TERMINAL_ID = 1; // Koronadal
+
+    // Get hub + selected terminal coords
+    const [termRows] = await db.promise().query(
+      `SELECT terminal_id, terminal_name, latitude, longitude
+         FROM terminal_locations
+        WHERE terminal_id IN (?, ?)`,
+      [HUB_TERMINAL_ID, terminal_id]
+    );
+
+    const hub  = termRows.find(t => t.terminal_id === HUB_TERMINAL_ID);
+    const dest = termRows.find(t => t.terminal_id === Number(terminal_id));
+
+    if (!hub || !dest) {
+      return res.status(404).json({ success: false, message: "Terminal not found" });
+    }
+
+    // Queue for the selected terminal
+    const [queueRows] = await db.promise().query(
+      `SELECT
+         q.queue_id,
+         q.driver_info_id AS driver_id,
+         q.queue_status,
+         ROW_NUMBER() OVER (
+           ORDER BY
+             CASE q.queue_status WHEN 'WAITING' THEN 0 ELSE 1 END,
+             q.scheduled_dispatch_at ASC,
+             q.joined_at ASC
+         ) AS queue_position,
+         d.first_name, d.middle_name, d.last_name,
+         v.plate_number,
+         vt.type_name AS vehicle_type
+       FROM vehicle_queue q
+       JOIN driver_info d        ON q.driver_info_id = d.driver_id
+       JOIN vehicles v           ON q.vehicle_id     = v.vehicle_id
+       LEFT JOIN vehicle_types vt ON v.type_id       = vt.type_id
+       LEFT JOIN dispatch_zones dz ON q.zone_id      = dz.zone_id
+       WHERE q.queue_status IN ('WAITING', 'QUEUED')
+         AND dz.terminal_id = ?
+       ORDER BY queue_position ASC`,
+      [terminal_id]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        hub: {
+          id:   hub.terminal_id,
+          name: hub.terminal_name,
+          lat:  Number(hub.latitude),
+          lng:  Number(hub.longitude),
+        },
+        dest: {
+          id:   dest.terminal_id,
+          name: dest.terminal_name,
+          lat:  Number(dest.latitude),
+          lng:  Number(dest.longitude),
+        },
+        queue: queueRows.map(q => ({
+          queue_id:       q.queue_id,
+          driver_id:      q.driver_id,
+          driver_name:    [q.first_name, q.middle_name, q.last_name].filter(Boolean).join(" "),
+          plate_number:   q.plate_number,
+          vehicle_type:   q.vehicle_type,
+          queue_position: q.queue_position,
+          queue_status:   q.queue_status,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("getTerminalQueue error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

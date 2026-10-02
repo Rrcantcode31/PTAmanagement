@@ -225,11 +225,12 @@ const styles = StyleSheet.create({
   noticeBrand: {
     color: '#272624',
     fontFamily: "monsterrat_font",
-    fontSize: 10,
+    fontSize: 12,
   },
 
   FareContainer: {
-    borderRadius: 20,
+    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 20,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 255, 255, 0.55)',
     borderWidth: 0.3,

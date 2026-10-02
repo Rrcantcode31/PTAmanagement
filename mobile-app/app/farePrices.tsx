@@ -9,6 +9,7 @@ import { BlurView } from 'expo-blur';
 import { usePathname } from "expo-router";
 import { useState, useEffect, useMemo } from "react";
 import { API_URL } from "./_layout";
+import { useAuth } from "../appContext/authContext";
 
 type Fare = {
   from_terminal: string;
@@ -22,6 +23,7 @@ type Fare = {
 
 export default function FarePrices() {
   const pathname = usePathname();
+  const { token } = useAuth();
 
   const [fares, setFares]     = useState<Fare[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,11 +36,18 @@ export default function FarePrices() {
 
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${API_URL}/api/auth/Fare`);
+
+        const res = await fetch(`${API_URL}/api/auth/Fare`, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!cancelled) setFares(Array.isArray(data) ? data : []);
@@ -49,9 +58,10 @@ export default function FarePrices() {
         if (!cancelled) setLoading(false);
       }
     }
-    load();
+
+    if (token) load();
     return () => { cancelled = true; };
-  }, []);
+  }, [token]);
 
   const groups = useMemo(() => {
     const map: Record<string, Fare[]> = {};
@@ -69,7 +79,7 @@ export default function FarePrices() {
     v == null || v === '' ? '—' : `₱${Number(v).toFixed(2)}`;
 
   return (
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <ImageBackground
         source={require('../assets/images/main-bg.png')}
@@ -81,9 +91,9 @@ export default function FarePrices() {
           <ScrollView contentContainerStyle={styles.container}>
             <View style={styles.header}>
               <Text style={styles.welcome}>Fare prices</Text>
-             <Text style={styles.noticeBrand}> LTFRB. This app only
-                displays the approved fare matrix and does not modify or set
-                any fare amount.
+              <Text style={styles.noticeBrand}>
+                LTFRB. This app only displays the approved fare matrix and does
+                not modify or set any fare amount.
               </Text>
             </View>
 
@@ -110,23 +120,17 @@ export default function FarePrices() {
               )}
 
               {!loading && !error && groups.length > 0 && (
-                <ScrollView
-                  horizontal={true}
-                  showsHorizontalScrollIndicator={false}
-                >
-                  {/* Fixed-width wrapper = sum of column widths + gaps */}
+                <ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
                   <View style={styles.tableWrapper}>
 
                     <Text style={styles.TextHeader}>Public Terminal Fare Prices</Text>
 
-                    {/* "Current fare" row — flex thirds within table width */}
                     <View style={styles.headerRow}>
                       <Text style={styles.currentHeader}>Current fare:</Text>
                       <Text style={styles.tradHeader}>Traditional UVE ₱ 2.40/KM</Text>
                       <Text style={styles.ModHeader}>Modernize UVE ₱ 2.50/KM</Text>
                     </View>
 
-                    {/* Column headers — pixel widths matching data cells */}
                     <View style={styles.secHeaderRow}>
                       <Text style={styles.routeHeader}>ROUTE FROM</Text>
                       <Text style={styles.viseHeader}>TO: VICE VERSA</Text>
@@ -195,23 +199,15 @@ export default function FarePrices() {
 const COL_ROUTE   = 90;
 const COL_TO      = 90;
 const COL_KM      = 60;
-const COL_FARE    = 100;   // every fare column
-const GAP         = 5;     // gap between columns
-const NUM_GAPS    = 6;     // 7 columns = 6 gaps
+const COL_FARE    = 100;
+const GAP         = 5;
+const NUM_GAPS    = 6;
 const TABLE_WIDTH = (COL_ROUTE + COL_TO + COL_KM + COL_FARE * 4) + GAP * NUM_GAPS;
-// 90+90+60+400+30 = 670
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1
-  },
-  container: {
-    flexGrow: 1,
-    paddingBottom: 100,
-  },
-  header: {
-    padding: 15,
-  },
+  safeArea: { flex: 1 },
+  container: { flexGrow: 1, paddingBottom: 100 },
+  header: { padding: 15 },
   welcome: {
     fontSize: 18,
     fontFamily: "monsterrat_kp",
@@ -220,11 +216,13 @@ const styles = StyleSheet.create({
 
   noticeBrand: {
     color: '#272624',
-    fontFamily: "monsterrat_kp"
+    fontFamily: "monsterrat_font",
+    fontSize: 12,
   },
 
   FareContainer: {
-    borderRadius: 20,
+    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 20,
     overflow: 'hidden',
     backgroundColor: 'rgba(255, 255, 255, 0.55)',
     borderWidth: 0.3,
@@ -240,36 +238,14 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
 
-  stateBox: {
-    paddingVertical: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stateText: {
-    marginTop: 10,
-    color: '#666',
-    fontSize: 12,
-    fontFamily: "monster_act",
-  },
-  errorText: {
-    color: '#c33',
-    fontSize: 13,
-    fontFamily: "monster_act",
-  },
+  stateBox: { paddingVertical: 50, alignItems: 'center', justifyContent: 'center' },
+  stateText: { marginTop: 10, color: '#666', fontSize: 12, fontFamily: "monster_act" },
+  errorText: { color: '#c33', fontSize: 13, fontFamily: "monster_act" },
 
-  /* Fixed-width table wrapper — sizes exactly to content */
-  tableWrapper: {
-    width: TABLE_WIDTH,
-  },
+  tableWrapper: { width: TABLE_WIDTH },
 
-  TextHeader: {
-    color: '#319086',
-    fontSize: 14,
-    padding: 8,
-    fontFamily: "monsterrat_kp",
-  },
+  TextHeader: { color: '#319086', fontSize: 14, padding: 8, fontFamily: "monsterrat_kp" },
 
-  /* "Current fare" row — thirds spanning the full table width */
   headerRow: {
     flexDirection: 'row',
     borderBottomWidth: 0.3,
@@ -277,33 +253,18 @@ const styles = StyleSheet.create({
     width: TABLE_WIDTH,
   },
   currentHeader: {
-    flex: 1,
-    fontSize: 10,
-    color: 'black',
-    fontFamily: "monster_act",
-    textAlign: 'center',
-    borderRightWidth: 0.3,
-    paddingVertical: 4,
+    flex: 1, fontSize: 10, color: 'black', fontFamily: "monster_act",
+    textAlign: 'center', borderRightWidth: 0.3, paddingVertical: 4,
   },
   tradHeader: {
-    flex: 1,
-    fontSize: 10,
-    color: 'black',
-    fontFamily: "monster_act",
-    textAlign: 'center',
-    borderRightWidth: 0.3,
-    paddingVertical: 4,
+    flex: 1, fontSize: 10, color: 'black', fontFamily: "monster_act",
+    textAlign: 'center', borderRightWidth: 0.3, paddingVertical: 4,
   },
   ModHeader: {
-    flex: 1,
-    fontSize: 10,
-    color: 'black',
-    fontFamily: "monster_act",
-    textAlign: 'center',
-    paddingVertical: 4,
+    flex: 1, fontSize: 10, color: 'black', fontFamily: "monster_act",
+    textAlign: 'center', paddingVertical: 4,
   },
 
-  /* Column header row */
   secHeaderRow: {
     flexDirection: 'row',
     gap: GAP,
@@ -321,7 +282,6 @@ const styles = StyleSheet.create({
   fareModHeader:  { fontSize: 10, color: 'black', fontFamily: "monster_act", textAlign: 'center', width: COL_FARE,  borderRightWidth: 0.3, paddingHorizontal: 4 },
   discModdHeader: { fontSize: 10, color: 'black', fontFamily: "monster_act", textAlign: 'center', width: COL_FARE,  paddingHorizontal: 4 },
 
-  /* Group divider */
   groupDivider: {
     marginTop: 12,
     marginBottom: 4,
@@ -337,7 +297,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
 
-  /* Data rows — same column widths as the header */
   dataRow: {
     flexDirection: 'row',
     gap: GAP,
@@ -345,15 +304,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.3,
     borderBottomColor: '#d9e6e3',
   },
-  dataRowAlt: {
-    backgroundColor: 'rgba(237, 246, 243, 0.5)',
-  },
+  dataRowAlt: { backgroundColor: 'rgba(237, 246, 243, 0.5)' },
   dataCell: {
     fontSize: 11,
     color: '#1f3d38',
     fontFamily: "monster_act",
     textAlign: 'left',
-     width: 94,
+    width: 94,
     paddingHorizontal: 4,
   },
   dataCellFare: {
