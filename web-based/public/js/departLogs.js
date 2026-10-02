@@ -2,7 +2,8 @@
 // DEPARTURE LOGS
 // Fetches /getDepartureLogs and renders the table
 // Loads only after a terminal is selected.
-// Also filters by date (YYYY-MM-DD) when provided.
+// Defaults to TODAY's logs. Past logs show only when
+// a specific date is picked from the date input.
 // ==================================================
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -48,6 +49,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return row.zone_name || '—';
   }
 
+  // YYYY-MM-DD for today in local time
+  function todayStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   // ==================================================
   // Empty-state helpers
   // ==================================================
@@ -61,12 +71,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================================================
   // Render
   // ==================================================
-  function render(rows) {
+  function render(rows, dateLabel) {
     tbody.innerHTML = '';
 
     if (rows.length === 0) {
       emptyState.style.display = 'block';
-      emptyState.querySelector('p').textContent = 'No departure logs for this selection.';
+      emptyState.querySelector('p').textContent =
+        dateLabel
+          ? `No departure logs for ${dateLabel}.`
+          : 'No departure logs for this selection.';
       totalCount.textContent = '0 total departures';
       return;
     }
@@ -101,7 +114,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================================================
   async function loadLogs() {
     const terminalId = filterSelect?.value || null;
-    const date       = dateInput?.value   || null;
+
+    // If the input is empty, use today. If it has a value, use that.
+    const selectedDate = dateInput?.value || todayStr();
+    const isToday = selectedDate === todayStr();
 
     // Only load when a terminal is selected.
     if (!terminalId) {
@@ -112,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const params = new URLSearchParams();
       params.set('terminal_id', terminalId);
-      if (date) params.set('date', date);
+      params.set('date', selectedDate);   // always send a date now
 
       const res = await fetch(`${API}?${params.toString()}`, {
         credentials: 'include',
@@ -124,7 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(json.message || 'Failed to load logs');
       }
 
-      render(json.data || []);
+      const dateLabel = isToday
+        ? 'today'
+        : fmtDate(selectedDate);
+
+      render(json.data || [], dateLabel);
     } catch (err) {
       console.error('[departureLogs] load failed:', err);
       emptyState.style.display = 'block';
@@ -166,14 +186,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (dateInput) {
     dateInput.addEventListener('change', loadLogs);
+    // If the user clears the date, snap back to today.
+    dateInput.addEventListener('blur', () => {
+      if (!dateInput.value) dateInput.value = todayStr();
+    });
   }
 
   // ==================================================
   // Init
   // ==================================================
   (async () => {
+    // Prefill date with today so "today" is the default view
+    if (dateInput) dateInput.value = todayStr();
+
     await loadTerminalFilter();
-    // Do NOT auto-load. Show prompt until a terminal is chosen.
     showPrompt('Select a terminal to view departure logs.');
   })();
 

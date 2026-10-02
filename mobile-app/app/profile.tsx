@@ -52,36 +52,10 @@ export default function profile() {
 
       </ScrollView>
      <View style={styles.row}>
-        <GridNavButton 
-          title="Dashboard" 
-          route="/Dashboard" 
-          icon="view-dashboard-outline"
-        />
-        
-        <GridNavButton 
-          title="Map routes" 
-          route="/mapping" 
-          icon="map-marker-path"
-        />
-        
-        <GridNavButton 
-          title="Fare prices" 
-          route="/farePrices" 
-          icon="cash-multiple"
-        />
-        
-        <GridNavButton 
-          title="Vehicles" 
-          route="/vehicle" 
-          icon="car"
-        />
-        
-        <GridNavButton 
-          title="Profile" 
-          route="/profile" 
-          icon="account-circle" // ✅ user profile icon
-          active={pathname === "/profile"}
-        />
+        <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+        <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
+        <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple" active={pathname === "/farePrices"} />
+        <GridNavButton title="Profile" route="/profile" icon="account-circle" active={pathname === "/profile"} />
       </View>
       </View>
       </ImageBackground>

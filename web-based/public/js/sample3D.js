@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // CONFIGURATION
   // ==================================================
 
-  const CENTER = [6.406392585980692, 124.80452341672029];
+  const CENTER = [6.48402898499551, 124.8519400126214];
 
   const GET_DISPATCH_ZONE_API    = '/getDispatchAreZone';
   const POST_DISPATCH_ZONE_API   = '/postDispatchAreaZone';

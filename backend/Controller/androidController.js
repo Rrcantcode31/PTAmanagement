@@ -570,3 +570,140 @@ export const getTerminalQueue = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// GET /api/auth/nearbyTerminals?lat=X&lng=Y
+export const getNearbyTerminals = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: "lat and lng required" });
+    }
+
+    const latitude  = Number(lat);
+    const longitude = Number(lng);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return res.status(400).json({ success: false, message: "Invalid coordinates" });
+    }
+
+    const [rows] = await db.promise().query(
+      `SELECT
+         t.terminal_id,
+         t.terminal_name,
+         t.terminal_address,
+         t.latitude,
+         t.longitude,
+         (6371 * ACOS(
+           LEAST(1, GREATEST(-1,
+             COS(RADIANS(?)) * COS(RADIANS(t.latitude)) *
+             COS(RADIANS(t.longitude) - RADIANS(?)) +
+             SIN(RADIANS(?)) * SIN(RADIANS(t.latitude))
+           ))
+         )) AS distance_km,
+         (
+           SELECT COUNT(*)
+             FROM vehicle_queue q
+             LEFT JOIN dispatch_zones dz ON q.zone_id = dz.zone_id
+            WHERE q.queue_status IN ('WAITING', 'QUEUED')
+              AND dz.terminal_id = t.terminal_id
+         ) AS queue_count
+       FROM terminal_locations t
+       ORDER BY distance_km ASC
+       LIMIT 5`,
+      [latitude, longitude, latitude]
+    );
+
+    return res.json({
+      success: true,
+      data: rows.map(r => ({
+        terminal_id:      r.terminal_id,
+        terminal_name:    r.terminal_name,
+        terminal_address: r.terminal_address,
+        latitude:         Number(r.latitude),
+        longitude:        Number(r.longitude),
+        distance_km:      Number(r.distance_km),
+        queue_count:      Number(r.queue_count),
+      })),
+    });
+  } catch (err) {
+    console.error("getNearbyTerminals error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// GET /api/auth/tripEstimate?from_terminal_id=X&to_terminal_id=Y
+export const getTripEstimate = async (req, res) => {
+  try {
+    const { from_terminal_id, to_terminal_id } = req.query;
+
+    if (!from_terminal_id || !to_terminal_id) {
+      return res.status(400).json({
+        success: false,
+        message: "from_terminal_id and to_terminal_id required",
+      });
+    }
+
+    // ---- 1. Look up both terminals ----
+    const [termRows] = await db.promise().query(
+      `SELECT terminal_id, terminal_name, latitude, longitude
+         FROM terminal_locations
+        WHERE terminal_id IN (?, ?)`,
+      [from_terminal_id, to_terminal_id]
+    );
+
+    const from = termRows.find(t => t.terminal_id === Number(from_terminal_id));
+    const to   = termRows.find(t => t.terminal_id === Number(to_terminal_id));
+
+    if (!from || !to) {
+      return res.status(404).json({ success: false, message: "Terminal not found" });
+    }
+
+    // ---- 2. Look up bounds + fares between them ----
+    const [fareRows] = await db.promise().query(
+      `SELECT
+         b.bounds_id,
+         b.kilometer,
+         f.regular_t,
+         f.discounted_t,
+         f.regular_m,
+         f.discounted_m
+       FROM terminal_bounds b
+       LEFT JOIN fare_prices f ON f.bounds_id = b.bounds_id
+       WHERE (b.from_terminal_id = ? AND b.to_terminal_id = ?)
+          OR (b.from_terminal_id = ? AND b.to_terminal_id = ?)
+       LIMIT 1`,
+      [from_terminal_id, to_terminal_id, to_terminal_id, from_terminal_id]
+    );
+
+    const fare = fareRows[0] || null;
+
+    return res.json({
+      success: true,
+      data: {
+        from: {
+          terminal_id:   from.terminal_id,
+          terminal_name: from.terminal_name,
+          latitude:      Number(from.latitude),
+          longitude:     Number(from.longitude),
+        },
+        to: {
+          terminal_id:   to.terminal_id,
+          terminal_name: to.terminal_name,
+          latitude:      Number(to.latitude),
+          longitude:     Number(to.longitude),
+        },
+        fare: fare ? {
+          bounds_id:     fare.bounds_id,
+          kilometer:     Number(fare.kilometer),
+          regular_t:     Number(fare.regular_t),
+          discounted_t:  Number(fare.discounted_t),
+          regular_m:     Number(fare.regular_m),
+          discounted_m:  Number(fare.discounted_m),
+        } : null,
+      },
+    });
+  } catch (err) {
+    console.error("getTripEstimate error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

@@ -2,7 +2,7 @@ import express from 'express';
 import 
 { signup, login, getRoles, 
 GetAllTerminalLocations, getFarePrices, getDriverInfo, getDriverQueue, 
-getTerminalQueue} from '../Controller/androidController.js';
+getTerminalQueue, getNearbyTerminals, getTripEstimate} from '../Controller/androidController.js';
 
 import { verifyToken, requireType, } from '../middleware/authMiddleware.js'
 
@@ -17,6 +17,8 @@ router.get('/getTerminalsLocation', verifyToken, requireType('driver', 'user'), 
 router.get('/Fare', verifyToken, requireType('driver', 'user'), getFarePrices);
 router.get ('/getDriverInfo', verifyToken, requireType('driver'), getDriverInfo);
 router.get('/driverQueue', verifyToken, requireType, getDriverQueue);
+router.get('/nearbyTerminals', verifyToken, getNearbyTerminals);
+router.get('/tripEstimate', verifyToken, getTripEstimate);
 
 
 

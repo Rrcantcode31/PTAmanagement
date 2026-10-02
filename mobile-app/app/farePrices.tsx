@@ -182,11 +182,10 @@ export default function FarePrices() {
           </ScrollView>
 
           <View style={styles.row}>
-            <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-            <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
-            <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
-            <GridNavButton title="Vehicles"    route="/vehicle"    icon="car"                    active={pathname === "/vehicle"} />
-            <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
+             <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+              <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
+              <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple" active={pathname === "/farePrices"} />
+              <GridNavButton title="Profile" route="/profile" icon="account-circle" active={pathname === "/profile"} />
           </View>
 
         </View>
@@ -205,9 +204,19 @@ const NUM_GAPS    = 6;
 const TABLE_WIDTH = (COL_ROUTE + COL_TO + COL_KM + COL_FARE * 4) + GAP * NUM_GAPS;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  container: { flexGrow: 1, paddingBottom: 100 },
-  header: { padding: 15 },
+  safeArea: { 
+    flex: 1 },
+
+  container: { 
+    flexGrow: 1, 
+    paddingBottom: 100 },
+
+  header: {
+    paddingHorizontal: 10,
+    paddingTop: 15,
+    paddingBottom: 1,      
+  },
+
   welcome: {
     fontSize: 18,
     fontFamily: "monsterrat_kp",
@@ -227,7 +236,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.55)',
     borderWidth: 0.3,
     borderColor: 'rgb(240, 233, 233)',
-    margin: 5,
+    marginHorizontal: 5,
+    marginTop: 2,
+    marginBottom: 5,
     padding: 5,
     minHeight: 300,
     maxHeight: 650,
@@ -249,7 +260,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     borderBottomWidth: 0.3,
-    borderBottomColor: "#000",
+    borderBottomColor: "#311f1f",
     width: TABLE_WIDTH,
   },
   currentHeader: {
@@ -323,10 +334,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  row: {
+ row: {
     position: "absolute",
     bottom: 25,
-    width: "98%",
+    width: "90%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -334,7 +345,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 24,
     height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.64)",
+    backgroundColor: "rgba(233, 233, 233, 0.94)",
     borderWidth: 0.8,
     borderColor: "rgba(255, 255, 255, 0.25)",
     shadowColor: "#000",
@@ -342,5 +353,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 6,
+    zIndex: 20,
   },
 });
