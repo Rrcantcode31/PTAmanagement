@@ -15,7 +15,6 @@ import { API_URL } from "./_layout";
 
 const { width, height } = Dimensions.get("window");
 
-// Koronadal City Public Terminal — the hub every route passes through
 const HUB_TERMINAL_ID = 1;
 
 // ============================================================
@@ -65,9 +64,13 @@ type TripPlan = {
   legs: TripLeg[];
 };
 
-// ============================================================
-// OSRM helper — one call returns geometry + distance + duration
-// ============================================================
+function greetingText() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 async function fetchRoute(
   fromLat: number,
   fromLng: number,
@@ -95,9 +98,6 @@ async function fetchRoute(
   };
 }
 
-// ============================================================
-// Nearest-terminal helper
-// ============================================================
 function findNearest(list: Terminal[], lat: number, lng: number): Terminal | null {
   let best: Terminal | null = null;
   let bestD = Infinity;
@@ -123,6 +123,9 @@ export default function Dashboard() {
   const [loadingTrip, setLoadingTrip] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // NEW: trip detail expand/collapse
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
     monsterrat_font: require("../assets/Font/monsterrat_font.ttf"),
@@ -130,12 +133,9 @@ export default function Dashboard() {
     digitalFont: require("../assets/Font/digitalFont.ttf"),
   });
 
-  // ============================================================
   // EFFECT 1 — Get GPS
-  // ============================================================
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -161,17 +161,13 @@ export default function Dashboard() {
         console.warn("[dashboard] location failed:", err);
       }
     })();
-
     return () => { cancelled = true; };
   }, []);
 
-  // ============================================================
   // EFFECT 2 — Load all terminals
-  // ============================================================
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/auth/getTerminalsLocation`, {
@@ -184,24 +180,10 @@ export default function Dashboard() {
         console.error("[dashboard] terminals load failed:", err);
       }
     })();
-
     return () => { cancelled = true; };
   }, [token]);
 
-  // ============================================================
-  // EFFECT 3 — Build the trip plan via hub-and-spoke model
-  //
-  // Every trip goes through Koronadal (the hub).
-  //
-  //   user   → nearest terminal
-  //   nearest → hub             (only if nearest ≠ hub)
-  //   hub    → destination      (only if destination ≠ hub)
-  //
-  // Special cases:
-  //   - destination === nearest → single leg (user → destination)
-  //   - destination === hub     → 2 legs (user → nearest → hub)
-  //   - nearest === hub         → 2 legs (user → hub → destination)
-  // ============================================================
+  // EFFECT 3 — Build the trip plan (hub-and-spoke)
   useEffect(() => {
     if (!myLocation || !destination || terminals.length === 0 || !token) {
       setTripPlan(null);
@@ -214,7 +196,6 @@ export default function Dashboard() {
       try {
         setLoadingTrip(true);
 
-        // ---------- 1. Build the ordered list of stops ----------
         const userStop: Stop = {
           lat: myLocation.lat,
           lng: myLocation.lng,
@@ -258,31 +239,24 @@ export default function Dashboard() {
         const stops: Stop[] = [userStop];
 
         if (!nearestStop) {
-          // No terminals in DB — go direct
           stops.push(destStop);
         } else if (nearestStop.terminal_id === destination.terminal_id) {
-          // Destination IS the user's nearest → single-leg trip
           stops.push(destStop);
         } else if (!hubStop) {
-          // No hub — nearest → destination directly
           stops.push(nearestStop);
           stops.push(destStop);
         } else if (nearestStop.terminal_id === HUB_TERMINAL_ID) {
-          // User's nearest IS the hub
           stops.push(hubStop);
           stops.push(destStop);
         } else if (destination.terminal_id === HUB_TERMINAL_ID) {
-          // Destination IS the hub
           stops.push(nearestStop);
           stops.push(hubStop);
         } else {
-          // Full hub-and-spoke: user → nearest → hub → destination
           stops.push(nearestStop);
           stops.push(hubStop);
           stops.push(destStop);
         }
 
-        // ---------- 2. Fetch OSRM routes for each leg in parallel ----------
         const legPromises = stops.slice(0, -1).map((from, i) => {
           const to = stops[i + 1];
           return (async (): Promise<TripLeg | null> => {
@@ -302,7 +276,6 @@ export default function Dashboard() {
 
         if (legs.length === 0) throw new Error("No routes available");
 
-        // ---------- 3. Fetch fares for terminal-to-terminal legs ----------
         await Promise.all(
           legs.map(async (leg) => {
             if (!leg.from.terminal_id || !leg.to.terminal_id) return;
@@ -322,7 +295,6 @@ export default function Dashboard() {
         );
 
         if (cancelled) return;
-
         setTripPlan({ stops, legs });
       } catch (err) {
         console.error("[dashboard] trip plan failed:", err);
@@ -335,9 +307,7 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [myLocation, destination, terminals, token]);
 
-  // ============================================================
-  // EFFECT 4 — Push the trip plan to the map
-  // ============================================================
+  // EFFECT 4 — Push trip to the map
   useEffect(() => {
     if (!webViewRef.current) return;
 
@@ -370,14 +340,17 @@ export default function Dashboard() {
     }
   }, [tripPlan, destination]);
 
+  // Close details whenever destination is cleared
+  useEffect(() => {
+    if (!destination) setDetailsOpen(false);
+  }, [destination]);
+
   if (!fontsLoaded) return null;
 
   const displayName = user
-    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Commuter"
     : "Commuter";
 
-  // ---- Safe accessors (protect against stale state after hot-reload) ----
-  const safeStops = tripPlan && Array.isArray(tripPlan.stops) ? tripPlan.stops : [];
   const safeLegs = tripPlan && Array.isArray(tripPlan.legs) ? tripPlan.legs : [];
 
   const fareLegs = safeLegs.filter((l) => l.fare);
@@ -385,6 +358,16 @@ export default function Dashboard() {
   const totalRegularM = fareLegs.reduce((s, l) => s + (l.fare?.regular_m ?? 0), 0);
   const totalDiscountedT = fareLegs.reduce((s, l) => s + (l.fare?.discounted_t ?? 0), 0);
   const totalDiscountedM = fareLegs.reduce((s, l) => s + (l.fare?.discounted_m ?? 0), 0);
+
+  // Trip totals for the collapsed summary
+  const totalDistance = safeLegs.reduce((s, l) => s + l.route.distance_km, 0);
+  const totalDuration = safeLegs.reduce((s, l) => s + l.route.duration_min, 0);
+  const fareLow = fareLegs.length > 0
+    ? fareLegs.reduce((s, l) => s + Math.min(l.fare!.regular_t, l.fare!.regular_m), 0)
+    : 0;
+  const fareHigh = fareLegs.length > 0
+    ? fareLegs.reduce((s, l) => s + Math.max(l.fare!.regular_t, l.fare!.regular_m), 0)
+    : 0;
 
   const peso = (v: number | undefined | null) =>
     v == null ? "—" : `₱${Number(v).toFixed(2)}`;
@@ -397,16 +380,13 @@ export default function Dashboard() {
 
   const tripActive = !!destination;
 
-  // Badge color for a leg index
   const legBadgeStyle = (idx: number, total: number) => {
     if (idx === 0) return styles.legBadgeFirst;
     if (idx === total - 1) return styles.legBadgeLast;
     return styles.legBadgeMid;
   };
 
-  // ============================================================
-  // Leaflet HTML — full map with route drawing
-  // ============================================================
+  // Leaflet HTML
   const leafletMapHTML = `
     <!DOCTYPE html>
     <html>
@@ -483,7 +463,6 @@ export default function Dashboard() {
 
           clearTripLayers();
 
-          // ----- Legs (color-coded) -----
           const LEG_COLORS = ['#2196F3', '#f39c12', '#e74c3c', '#9b59b6'];
           const allCoords = [];
 
@@ -501,10 +480,8 @@ export default function Dashboard() {
             allCoords.push.apply(allCoords, leg.coords);
           });
 
-          // ----- Terminal stop markers -----
           data.terminalStops.forEach(function (stop) {
             if (stop.isDestination) {
-              // Orange destination pin
               const destIcon = L.divIcon({
                 className: '',
                 iconSize: [28, 40],
@@ -522,7 +499,6 @@ export default function Dashboard() {
                 .bindPopup('<b>' + stop.name + '</b><br>Destination');
               tripMarkers.push(m);
             } else {
-              // Green bus icon for intermediate stops
               const busIcon = L.divIcon({
                 className: '',
                 iconSize: [26, 26],
@@ -571,9 +547,6 @@ export default function Dashboard() {
     </html>
   `;
 
-  // ============================================================
-  // Render
-  // ============================================================
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ImageBackground
@@ -583,137 +556,8 @@ export default function Dashboard() {
       >
         <View style={styles.overlay}>
 
-          {/* HEADER */}
-          <View style={styles.headerSection}>
-            <Text style={styles.welcome}>Dashboard</Text>
-            <Text style={styles.name}>{displayName}</Text>
-          </View>
-
-          {/* TRIP PLANNER */}
-          <View style={styles.plannerSection}>
-            <View style={styles.plannerCard}>
-
-              {/* FROM */}
-              <Text style={styles.fieldLabel}>FROM</Text>
-              <View style={[styles.field, styles.fieldReadOnly]}>
-                <Ionicons name="location" size={16} color="#2c7a6e" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldText}>Your current location</Text>
-                  {safeLegs.length > 0 && (
-                    <Text style={styles.fieldSub}>
-                      Ride to {safeLegs[0].to.name}
-                      {safeLegs[0].to.isHub ? " (Hub)" : ""}
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              {/* TO */}
-              <Text style={[styles.fieldLabel, { marginTop: 10 }]}>TO</Text>
-              <TouchableOpacity
-                style={styles.field}
-                onPress={() => setPickerOpen(true)}
-                activeOpacity={0.75}
-              >
-                <Ionicons name="navigate" size={16} color="#D85A30" />
-                <Text style={styles.fieldText} numberOfLines={1}>
-                  {destination ? destination.terminal_name : "Select destination"}
-                </Text>
-                {destination ? (
-                  <TouchableOpacity
-                    onPress={() => setDestination(null)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons name="close-circle" size={18} color="#7f9f97" />
-                  </TouchableOpacity>
-                ) : (
-                  <Ionicons name="chevron-down" size={16} color="#7f9f97" />
-                )}
-              </TouchableOpacity>
-
-              {/* TRIP BREAKDOWN */}
-              {tripActive && (
-                <View style={styles.results}>
-                  {loadingTrip ? (
-                    <ActivityIndicator size="small" color="#2c7a6e" style={{ marginVertical: 14 }} />
-                  ) : safeLegs.length > 0 ? (
-                    <>
-                      <ScrollView
-                        style={{ maxHeight: 240 }}
-                        showsVerticalScrollIndicator={false}
-                      >
-                        {safeLegs.map((leg, idx) => (
-                          <View key={idx} style={styles.legRow}>
-                            <View style={[styles.legBadge, legBadgeStyle(idx, safeLegs.length)]}>
-                              <Ionicons name="car" size={13} color="#fff" />
-                            </View>
-
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.legTitle}>
-                                Ride to {leg.to.name}
-                                {leg.to.terminal_id === HUB_TERMINAL_ID && (
-                                  <Text style={styles.hubTag}> · Hub</Text>
-                                )}
-                              </Text>
-                              <Text style={styles.legStats}>
-                                {fmtKm(leg.route.distance_km)} · {fmtMin(leg.route.duration_min)}
-                              </Text>
-
-                              {leg.fare && (
-                                <View style={styles.legFareRow}>
-                                  <Text style={styles.legFareLabel}>FARE</Text>
-                                  <Text style={styles.legFareValue}>
-                                    {peso(Math.min(leg.fare.regular_t, leg.fare.regular_m))}
-                                    {" – "}
-                                    {peso(Math.max(leg.fare.regular_t, leg.fare.regular_m))}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        ))}
-                      </ScrollView>
-
-                      {/* TOTAL FARE SUMMARY */}
-                      {fareLegs.length > 0 && (
-                        <View style={styles.fareBox}>
-                          <Text style={styles.fareBoxTitle}>
-                            TOTAL FARE FOR THE TRIP
-                          </Text>
-
-                          <View style={styles.fareRow}>
-                            <Text style={styles.fareLabel}>Traditional UVE</Text>
-                            <Text style={styles.fareValue}>{peso(totalRegularT)}</Text>
-                          </View>
-
-                          <View style={styles.fareRow}>
-                            <Text style={styles.fareLabel}>Modern UVE</Text>
-                            <Text style={styles.fareValue}>{peso(totalRegularM)}</Text>
-                          </View>
-
-                          <View style={styles.fareDivider} />
-
-                          <View style={styles.fareRow}>
-                            <Text style={styles.fareLabelMuted}>Student / Senior / PWD</Text>
-                            <Text style={styles.fareValueMuted}>
-                              from {peso(Math.min(totalDiscountedT, totalDiscountedM))}
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-                    </>
-                  ) : myLocation ? (
-                    <Text style={styles.noFare}>Route unavailable right now.</Text>
-                  ) : (
-                    <Text style={styles.noFare}>Waiting for your location…</Text>
-                  )}
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* MAP */}
-          <View style={styles.mapContainer}>
+          {/* ===== FULL-SCREEN MAP ===== */}
+          <View style={StyleSheet.absoluteFill}>
             <WebView
               ref={webViewRef}
               originWhitelist={["*"]}
@@ -755,7 +599,143 @@ export default function Dashboard() {
             />
           </View>
 
-          {/* BOTTOM NAV */}
+          {/* ===== COMPACT TOP CARD ===== */}
+          <View style={styles.topCard}>
+
+            {/* Compact header: title + greeting in one line */}
+            <View style={styles.headerRow}>
+              <Text style={styles.welcome}>Dashboard</Text>
+              <Text style={styles.greeting} numberOfLines={1}>
+                {greetingText()}, {displayName}
+              </Text>
+            </View>
+
+            {/* TO field — compact */}
+            <TouchableOpacity
+              style={styles.field}
+              onPress={() => setPickerOpen(true)}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="navigate" size={15} color="#D85A30" />
+              <Text style={styles.fieldText} numberOfLines={1}>
+                {destination ? destination.terminal_name : "Where to?"}
+              </Text>
+              {destination ? (
+                <TouchableOpacity
+                  onPress={() => setDestination(null)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close-circle" size={17} color="#7f9f97" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name="chevron-down" size={15} color="#7f9f97" />
+              )}
+            </TouchableOpacity>
+
+            {/* Compact trip summary — appears once a destination is picked */}
+            {tripActive && !loadingTrip && safeLegs.length > 0 && (
+              <TouchableOpacity
+                style={styles.summaryRow}
+                activeOpacity={0.8}
+                onPress={() => setDetailsOpen(!detailsOpen)}
+              >
+                <View style={styles.summaryPill}>
+                  <Ionicons name="car" size={12} color="#2c7a6e" />
+                  <Text style={styles.summaryText}>
+                    {safeLegs.length} ride{safeLegs.length > 1 ? "s" : ""}
+                  </Text>
+                </View>
+
+                <View style={styles.summaryPill}>
+                  <Ionicons name="time-outline" size={12} color="#2c7a6e" />
+                  <Text style={styles.summaryText}>{fmtMin(totalDuration)}</Text>
+                </View>
+
+                <View style={styles.summaryPill}>
+                  <Ionicons name="git-commit-outline" size={12} color="#2c7a6e" />
+                  <Text style={styles.summaryText}>{fmtKm(totalDistance)}</Text>
+                </View>
+
+                {fareLegs.length > 0 && (
+                  <View style={styles.summaryPill}>
+                    <Ionicons name="cash-outline" size={12} color="#2c7a6e" />
+                    <Text style={styles.summaryText}>
+                      {peso(fareLow)}–{peso(fareHigh)}
+                    </Text>
+                  </View>
+                )}
+
+                <Ionicons
+                  name={detailsOpen ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#2c7a6e"
+                />
+              </TouchableOpacity>
+            )}
+
+            {tripActive && loadingTrip && (
+              <View style={styles.summaryRow}>
+                <ActivityIndicator size="small" color="#2c7a6e" />
+                <Text style={styles.loadingText}>Building route…</Text>
+              </View>
+            )}
+
+            {/* Expanded breakdown — only when user taps the summary */}
+            {tripActive && detailsOpen && safeLegs.length > 0 && (
+              <View style={styles.details}>
+                <ScrollView
+                  style={{ maxHeight: 180 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {safeLegs.map((leg, idx) => (
+                    <View key={idx} style={styles.legRow}>
+                      <View style={[styles.legBadge, legBadgeStyle(idx, safeLegs.length)]}>
+                        <Ionicons name="car" size={11} color="#fff" />
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.legTitle}>
+                          Ride to {leg.to.name}
+                          {leg.to.terminal_id === HUB_TERMINAL_ID && (
+                            <Text style={styles.hubTag}> · Hub</Text>
+                          )}
+                        </Text>
+                        <Text style={styles.legStats}>
+                          {fmtKm(leg.route.distance_km)} · {fmtMin(leg.route.duration_min)}
+                          {leg.fare ? ` · ${peso(Math.min(leg.fare.regular_t, leg.fare.regular_m))}–${peso(Math.max(leg.fare.regular_t, leg.fare.regular_m))}` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+
+                {fareLegs.length > 0 && (
+                  <View style={styles.fareBox}>
+                    <View style={styles.fareRow}>
+                      <Text style={styles.fareLabel}>Traditional UVE</Text>
+                      <Text style={styles.fareValue}>{peso(totalRegularT)}</Text>
+                    </View>
+
+                    <View style={styles.fareRow}>
+                      <Text style={styles.fareLabel}>Modern UVE</Text>
+                      <Text style={styles.fareValue}>{peso(totalRegularM)}</Text>
+                    </View>
+
+                    <View style={styles.fareDivider} />
+
+                    <View style={styles.fareRow}>
+                      <Text style={styles.fareLabelMuted}>Student / Senior / PWD</Text>
+                      <Text style={styles.fareValueMuted}>
+                        from {peso(Math.min(totalDiscountedT, totalDiscountedM))}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* ===== BOTTOM NAV ===== */}
           <View style={styles.navRow}>
             <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
             <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
@@ -819,59 +799,121 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   background: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: "rgba(255, 255, 255, 0.2)" },
+  overlay: { flex: 1 },
 
-  // Header
-  headerSection: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 5 },
-  welcome: {
-    fontSize: 18, fontFamily: "monsterrat_kp",
-    color: "#1e2a3a", fontWeight: "600", letterSpacing: 0.5,
-  },
-  name: {
-    fontSize: 16, fontFamily: "monster_act", color: "#2c3e50",
-    paddingBottom: 10, borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.1)", marginTop: 4,
-  },
-
-  // Trip planner
-  plannerSection: { paddingHorizontal: 15, paddingTop: 12, paddingBottom: 10 },
-  plannerCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    borderRadius: 20,
-    padding: 14,
+  // ============================================================
+  // COMPACT TOP CARD — floats over the map
+  // ============================================================
+  topCard: {
+    position: "absolute",
+    top: 10,
+    left: 15,
+    right: 15,
+    zIndex: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderRadius: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: "rgba(210, 230, 224, 0.9)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
   },
 
-  fieldLabel: {
-    fontSize: 10, letterSpacing: 1.2, fontFamily: "monsterrat_font",
-    fontWeight: "700", color: "#7f9f97", marginBottom: 4, paddingLeft: 2,
+  // Header: one compact line
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 8,
   },
+  welcome: {
+    fontSize: 16,
+    fontFamily: "monsterrat_kp",
+    color: "#1e2a3a",
+    fontWeight: "700",
+  },
+  greeting: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "monster_act",
+    color: "#2c3e50",
+    textAlign: "right",
+  },
+
+  // Compact field
   field: {
-    flexDirection: "row", alignItems: "center", gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     backgroundColor: "#f7fbfa",
-    borderRadius: 12, borderWidth: 1, borderColor: "#dcebe6",
-    paddingHorizontal: 12, paddingVertical: 11,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#dcebe6",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  fieldReadOnly: { backgroundColor: "#f0f7f5" },
-  fieldText: { flex: 1, fontSize: 14, fontFamily: "monster_act", color: "#1a1a1a" },
-  fieldSub: { fontSize: 11, fontFamily: "monster_act", color: "#2c7a6e", marginTop: 2 },
+  fieldText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "monster_act",
+    color: "#1a1a1a",
+  },
 
-  results: { marginTop: 12 },
+  // Compact trip summary (collapsed state)
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: "#f0f7f5",
+    borderRadius: 11,
+  },
+  summaryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#dcebe6",
+  },
+  summaryText: {
+    fontSize: 10,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#2c7a6e",
+  },
+  loadingText: {
+    fontSize: 11,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginLeft: 8,
+  },
+
+  // Expanded details
+  details: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 0.5,
+    borderTopColor: "#dcebe6",
+  },
 
   legRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 10,
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   legBadge: {
-    width: 26, height: 26, borderRadius: 13,
+    width: 22, height: 22, borderRadius: 11,
     alignItems: "center", justifyContent: "center",
   },
   legBadgeFirst: { backgroundColor: "#2196F3" },
@@ -879,74 +921,87 @@ const styles = StyleSheet.create({
   legBadgeLast: { backgroundColor: "#e74c3c" },
 
   legTitle: {
-    fontSize: 13, fontFamily: "monsterrat_kp", color: "#1a1a1a",
+    fontSize: 12,
+    fontFamily: "monsterrat_kp",
+    color: "#1a1a1a",
   },
   hubTag: {
     fontSize: 10, fontFamily: "monster_act", color: "#7f9f97",
   },
   legStats: {
-    fontSize: 11, fontFamily: "monster_act", color: "#7f9f97", marginTop: 2,
-  },
-  legFareRow: {
-    flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4,
-  },
-  legFareLabel: {
-    fontSize: 10, fontFamily: "monsterrat_font",
-    fontWeight: "700", color: "#7f9f97", letterSpacing: 0.6,
-  },
-  legFareValue: {
-    fontSize: 12, fontFamily: "monsterrat_kp",
-    color: "#2c7a6e", fontWeight: "700",
+    fontSize: 10,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginTop: 1,
   },
 
   fareBox: {
     backgroundColor: "#f7fbfa",
-    borderRadius: 14, padding: 12,
-    borderWidth: 1, borderColor: "#dcebe6",
-    marginTop: 10,
-  },
-  fareBoxTitle: {
-    fontSize: 10, fontFamily: "monsterrat_font",
-    fontWeight: "700", color: "#7f9f97",
-    letterSpacing: 1, marginBottom: 8,
+    borderRadius: 11,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#dcebe6",
+    marginTop: 8,
   },
   fareRow: {
-    flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center", paddingVertical: 5,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
   },
-  fareLabel: { fontSize: 13, fontFamily: "monster_act", color: "#1a1a1a" },
+  fareLabel: { fontSize: 12, fontFamily: "monster_act", color: "#1a1a1a" },
   fareValue: {
-    fontSize: 14, fontFamily: "monsterrat_kp",
-    color: "#2c7a6e", fontWeight: "700",
+    fontSize: 13,
+    fontFamily: "monsterrat_kp",
+    color: "#2c7a6e",
+    fontWeight: "700",
   },
   fareDivider: {
-    height: 0.5, backgroundColor: "#dcebe6", marginVertical: 6,
+    height: 0.5,
+    backgroundColor: "#dcebe6",
+    marginVertical: 5,
   },
-  fareLabelMuted: { fontSize: 12, fontFamily: "monster_act", color: "#7f9f97" },
-  fareValueMuted: { fontSize: 12, fontFamily: "monster_act", color: "#7f9f97" },
+  fareLabelMuted: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
+  fareValueMuted: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
 
-  noFare: {
-    fontSize: 12, fontFamily: "monster_act",
-    color: "#7f9f97", textAlign: "center", paddingVertical: 10,
+  // ============================================================
+  // MAP
+  // ============================================================
+  map: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#e9efe9",
   },
 
-  // Map
-  mapContainer: { flex: 1, width, backgroundColor: "#f0f0f0" },
-  map: { flex: 1, width: "100%", height: "100%", backgroundColor: "#f0f0f0" },
-
-  // Bottom nav
+  // ============================================================
+  // BOTTOM NAV
+  // ============================================================
   navRow: {
-    position: "absolute", bottom: 25, width: "90%", alignSelf: "center",
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 12, borderRadius: 24, height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.64)",
-    borderWidth: 0.8, borderColor: "rgba(255, 255, 255, 0.25)",
+    position: "absolute",
+    bottom: 25,
+    width: "90%",
+    alignSelf: "center",
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    height: 46,
+    backgroundColor: "rgba(233, 233, 233, 0.94)",
+    borderWidth: 0.8,
+    borderColor: "rgba(255, 255, 255, 0.25)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 10, elevation: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
   },
 
-  // Picker modal
+  // ============================================================
+  // MODAL
+  // ============================================================
   modalBackdrop: {
     flex: 1, backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center", paddingHorizontal: 30,
