@@ -31,6 +31,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     // load terminals ONCE
     await loadTerminals();
 
+    // ==========================================================
+    // MUTUAL EXCLUSION: same terminal can't be both From and To
+    // ==========================================================
+
+    function syncTerminalExclusion() {
+        const fromVal = fromSelect.value;
+        const toVal   = toSelect.value;
+
+        // Reset all options to enabled first
+        Array.from(fromSelect.options).forEach(opt => { opt.disabled = false; });
+        Array.from(toSelect.options).forEach(opt => { opt.disabled = false; });
+
+        // If To equals From, clear To to prevent invalid pairing
+        if (fromVal && fromVal === toVal) {
+            toSelect.value = "";
+        }
+
+        // Re-read after possible clear
+        const newFromVal = fromSelect.value;
+        const newToVal   = toSelect.value;
+
+        // Block "from" value in "to" select
+        if (newFromVal) {
+            Array.from(toSelect.options).forEach(opt => {
+                if (opt.value === newFromVal) opt.disabled = true;
+            });
+        }
+
+        // Block "to" value in "from" select
+        if (newToVal) {
+            Array.from(fromSelect.options).forEach(opt => {
+                if (opt.value === newToVal) opt.disabled = true;
+            });
+        }
+    }
+
+    fromSelect.addEventListener("change", syncTerminalExclusion);
+    toSelect.addEventListener("change", syncTerminalExclusion);
+
+    // Run once on load in case any default value is set
+    syncTerminalExclusion();
+
+    // ==========================================================
+    // VALIDATION MODAL
+    // ==========================================================
+
     function showValidationModal({
         type = "warning",
         title = "Warning",
@@ -92,6 +138,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // ==========================================================
+    // MODE STATE
+    // ==========================================================
+
     let addMode = false;
     let updateMode = false;
     let deleteMode = false;
@@ -115,6 +165,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById("discounted_price").value = "";
         document.getElementById("regular_m_price").value = "";
         document.getElementById("discounted_m_price").value = "";
+
+        // Re-sync so no stale disabled state lingers after clearing
+        syncTerminalExclusion();
     }
 
     function populateModalFromFare(fare) {
@@ -125,12 +178,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById("discounted_price").value = fare.discounted_t ?? "";
         document.getElementById("regular_m_price").value = fare.regular_m ?? "";
         document.getElementById("discounted_m_price").value = fare.discounted_m ?? "";
+
+        // Re-sync after populating so the just-loaded pair is respected
+        syncTerminalExclusion();
     }
 
     function clearRowSelection() {
         selectedBoundsId = null;
         container.querySelectorAll(".fare-data-row.selected").forEach(r => r.classList.remove("selected"));
     }
+
+    // ==========================================================
+    // ADD
+    // ==========================================================
 
     addBtn.addEventListener("click", () => {
         if (addMode) {
@@ -146,6 +206,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearFareModalInputs();
         showModal();
     });
+
+    // ==========================================================
+    // UPDATE
+    // ==========================================================
 
     uptBtn.addEventListener("click", () => {
         if (updateMode) {
@@ -167,6 +231,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         showModal();
     });
+
+    // ==========================================================
+    // DELETE
+    // ==========================================================
 
     dltBtn.addEventListener("click", async () => {
         if (deleteMode) {
@@ -246,10 +314,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // ==========================================================
+    // CLOSE MODAL
+    // ==========================================================
+
     closeBtn.addEventListener("click", () => {
         hideModal();
         clearFareModalInputs();
+        resetModes();
     });
+
+    // ==========================================================
+    // SAVE (ADD / UPDATE)
+    // ==========================================================
 
     saveBtn.addEventListener("click", async () => {
         try {
@@ -262,6 +339,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                 regular_m: document.getElementById("regular_m_price").value.trim(),
                 discounted_m: document.getElementById("discounted_m_price").value.trim(),
             };
+
+            // Simple guard: both ends must be selected and different
+            if (!basePayload.from_terminal_id || !basePayload.to_terminal_id) {
+                await showValidationModal({
+                    type: "warning",
+                    title: "Missing Terminals",
+                    message: "Please select both a From and a To terminal.",
+                    confirmText: "OK",
+                    showCancel: false
+                });
+                return;
+            }
+
+            if (basePayload.from_terminal_id === basePayload.to_terminal_id) {
+                await showValidationModal({
+                    type: "warning",
+                    title: "Invalid Route",
+                    message: "From and To terminals must be different.",
+                    confirmText: "OK",
+                    showCancel: false
+                });
+                return;
+            }
 
             let url, payload, method, successMessage;
 
@@ -317,6 +417,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
     });
+
+    // ==========================================================
+    // LOAD + RENDER FARE PRICES
+    // ==========================================================
 
     try {
         const res = await fetch("/getFarePrice", { cache: "no-store" });
@@ -404,6 +508,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         container.innerHTML = "<p>Error loading fare prices.</p>";
     }
 
+    // ==========================================================
+    // LOAD TERMINALS (populates both dropdowns)
+    // ==========================================================
+
     async function loadTerminals() {
         try {
             const res = await fetch('/terminals');
@@ -424,6 +532,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 fromSelect.appendChild(option1);
                 toSelect.appendChild(option2);
             });
+
+            // After the selects are populated, sync the exclusion state
+            syncTerminalExclusion();
 
         } catch (err) {
             console.error("Failed to load terminals:", err);

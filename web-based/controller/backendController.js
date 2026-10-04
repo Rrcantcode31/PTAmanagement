@@ -902,8 +902,11 @@ exports.DeleteDriverInfo = async (req, res) => {
     await connection.beginTransaction();
 
     try {
+      // ---- 1. Resolve driver_info_id + assigned vehicle_id ----
       const [infoRows] = await connection.query(
-        `SELECT vehicle_id FROM driver_info WHERE driver_id = ?`,
+        `SELECT driver_info_id, vehicle_id
+           FROM driver_info
+          WHERE driver_id = ?`,
         [driver_id]
       );
 
@@ -913,31 +916,87 @@ exports.DeleteDriverInfo = async (req, res) => {
         return res.status(404).json({ success: false, message: "Driver not found" });
       }
 
-      const vehicleId = infoRows[0].vehicle_id;
+      const driverInfoId = infoRows[0].driver_info_id;
+      const vehicleId    = infoRows[0].vehicle_id;
 
-      // Remove driver_info first (references driverauth + vehicles)
-      await connection.query(`DELETE FROM driver_info WHERE driver_id = ?`, [driver_id]);
-      await connection.query(`DELETE FROM driverauth WHERE driver_id = ?`, [driver_id]);
+      console.log(
+        `[Delete] driver_id=${driver_id} ` +
+        `driver_info_id=${driverInfoId} ` +
+        `vehicle_id=${vehicleId}`
+      );
 
-      // Only delete the vehicle if no other driver is still using it
+      // ---- 2a. Null departure_logs.queue_id for this driver's queues ----
+      const [upd1] = await connection.query(
+        `UPDATE departure_logs dl
+            JOIN vehicle_queue vq ON dl.queue_id = vq.queue_id
+           SET dl.queue_id = NULL
+         WHERE vq.driver_info_id = ?`,
+        [driverInfoId]
+      );
+      console.log(`[Delete] departure_logs queue_id nulled: ${upd1.affectedRows}`);
+
+      // ---- 2b. Null departure_logs.driver_info_id for this driver ----
+      const [upd2] = await connection.query(
+        `UPDATE departure_logs
+            SET driver_info_id = NULL
+          WHERE driver_info_id = ?`,
+        [driverInfoId]
+      );
+      console.log(`[Delete] departure_logs driver_info_id nulled: ${upd2.affectedRows}`);
+
+      // ---- 3. Delete the driver's queue entries ----
+      const [delQueue] = await connection.query(
+        `DELETE FROM vehicle_queue WHERE driver_info_id = ?`,
+        [driverInfoId]
+      );
+      console.log(`[Delete] vehicle_queue rows removed: ${delQueue.affectedRows}`);
+
+      // ---- 4. Delete driver_info ----
+      const [delInfo] = await connection.query(
+        `DELETE FROM driver_info WHERE driver_info_id = ?`,
+        [driverInfoId]
+      );
+      console.log(`[Delete] driver_info rows removed: ${delInfo.affectedRows}`);
+
+      // ---- 5. Delete driverauth (now safe) ----
+      const [delAuth] = await connection.query(
+        `DELETE FROM driverauth WHERE driver_id = ?`,
+        [driver_id]
+      );
+      console.log(`[Delete] driverauth rows removed: ${delAuth.affectedRows}`);
+
+      // ---- 6. Delete the vehicle only if no other driver uses it ----
       if (vehicleId) {
         const [stillUsed] = await connection.query(
           `SELECT driver_id FROM driver_info WHERE vehicle_id = ?`,
           [vehicleId]
         );
+
         if (stillUsed.length === 0) {
-          await connection.query(`DELETE FROM vehicles WHERE vehicle_id = ?`, [vehicleId]);
+          const [delVeh] = await connection.query(
+            `DELETE FROM vehicles WHERE vehicle_id = ?`,
+            [vehicleId]
+          );
+          console.log(`[Delete] vehicle rows removed: ${delVeh.affectedRows}`);
+        } else {
+          console.log(`[Delete] vehicle ${vehicleId} kept — still shared`);
         }
       }
 
       await connection.commit();
-      return res.status(200).json({ success: true, message: "Driver deleted successfully" });
+      connection.release();
+
+      return res.status(200).json({
+        success: true,
+        message: "Driver deleted successfully",
+      });
+
     } catch (err) {
       await connection.rollback();
-      throw err;
-    } finally {
       connection.release();
+      throw err;
     }
+
   } catch (err) {
     console.error("DeleteDriverInfo error:", err);
     return res.status(500).json({
@@ -947,7 +1006,6 @@ exports.DeleteDriverInfo = async (req, res) => {
     });
   }
 };
-
 // {--- FARE PRICE BACKEND AREA ---}
 
 // Admin Insert Fare Prices

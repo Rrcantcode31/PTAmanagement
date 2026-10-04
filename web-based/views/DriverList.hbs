@@ -122,27 +122,47 @@
     </div>
 
     <div class="driver-panel">
-      <div class="panel-title">
-        <h2>Public Terminal Drivers &amp; Vehicles</h2>
-        <p>Driver list grouped by vehicle type</p>
-      </div>
-    
+  <div class="panel-header-row">
+    <div class="panel-title">
+      <h2>Public Terminal Drivers &amp; Vehicles</h2>
+      <p>Driver list grouped by vehicle type</p>
+    </div>
 
-        <div class="table-wrapper">
-        <div class="head-column">
-          <div class="col-vehicle">Vehicle-use</div>
-          <div class="col-driver-name">Driver-Full name</div>
-          <div class="col-cont-no">Contact number</div>
-          <div class="col-status">Status</div>
-          <div class="col-plate-no">Plate-number</div>
-        </div>
-        
-
-        <!-- Table Data -->
-        <div id="regionalPriceContainer">
-        </div>
-        </div>
+    <!-- =====================================================
+      SEARCH + SORT CONTROLS
+    ===================================================== -->
+    <div class="driver-controls">
+      <div class="search-wrap">
+        <input
+          type="text"
+          id="driver-search"
+          class="driver-search"
+          placeholder="Search name, plate, contact..."
+          autocomplete="off"
+        />
+        <button type="button" id="driver-search-clear" class="search-clear" aria-label="Clear search">×</button>
       </div>
+
+      <select id="driver-sort" class="driver-sort">
+        <option value="name-asc">Name (A–Z)</option>
+        <option value="terminal">Terminal</option>
+        <option value="vehicle-type">Vehicle Type</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <div class="head-column">
+      <div class="col-vehicle">Vehicle-use</div>
+      <div class="col-driver-name">Driver-Full name</div>
+      <div class="col-cont-no">Contact number</div>
+      <div class="col-status">Status</div>
+      <div class="col-plate-no">Plate-number</div>
+    </div>
+
+    <div id="regionalPriceContainer"></div>
+  </div>
+</div>
 
         <!-- =====================================================
         VALIDATION / CONFIRMATION MODAL
@@ -239,4 +259,4 @@
      
     
 </body>
-</html> 
+</html>
