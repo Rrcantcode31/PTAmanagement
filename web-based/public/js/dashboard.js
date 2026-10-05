@@ -1,93 +1,82 @@
-document.addEventListener('DOMContentLoaded', async () => {
-  const modal = document.getElementById('terminal-modal');
-  const modalLat = document.getElementById('modal-lat');
-  const modalLng = document.getElementById('modal-lng');
-  const modalName = document.getElementById('modal-name-input');
-  const modalAddress = document.getElementById('modal-address-input');
-  const modalSaveBtn = document.getElementById('modal-save');
-  const modalCloseBtn = document.getElementById('modal-close');
+// Start fetching terminals immediately, in parallel with DOM/map setup.
+const terminalsPromise = fetch('/terminals')
+  .then((r) => {
+    if (!r.ok) throw new Error('Server error');
+    return r.json();
+  });
+terminalsPromise.catch(() => {}); // avoid unhandled rejection; handled later
 
-  const mapEl = document.getElementById('map');
+document.addEventListener('DOMContentLoaded', () => {
+  const $ = (id) => document.getElementById(id);
+
+  const modal = $('terminal-modal');
+  const modalLat = $('modal-lat');
+  const modalLng = $('modal-lng');
+  const modalName = $('modal-name-input');
+  const modalAddress = $('modal-address-input');
+  const modalSaveBtn = $('modal-save');
+  const modalCloseBtn = $('modal-close');
+
+  const mapEl = $('map');
   const addBtn = document.querySelector('.add-btn');
   const updateBtn = document.querySelector('.update-btn');
   const deleteBtn = document.querySelector('.delete-btn');
 
-  const validationModal = document.getElementById("validation-modal");
-  const validationIcon = document.getElementById("validation-icon");
-  const validationTitle = document.getElementById("validation-title");
-  const validationMessage = document.getElementById("validation-message");
-  const validationCancel = document.getElementById("validation-cancel");
-  const validationConfirm = document.getElementById("validation-confirm");
+  const validationModal = $('validation-modal');
+  const validationIcon = $('validation-icon');
+  const validationTitle = $('validation-title');
+  const validationMessage = $('validation-message');
+  const validationCancel = $('validation-cancel');
+  const validationConfirm = $('validation-confirm');
 
   if (
-    !mapEl ||
-    typeof window.L === 'undefined' ||
-    !modal ||
-    !modalLat ||
-    !modalLng ||
-    !modalName ||
-    !modalAddress ||
-    !modalSaveBtn ||
-    !modalCloseBtn ||
-    !addBtn ||
-    !updateBtn ||
-    !deleteBtn ||
-    !validationModal ||
-    !validationIcon ||
-    !validationTitle ||
-    !validationMessage ||
-    !validationCancel ||
-    !validationConfirm
+    !mapEl || typeof window.L === 'undefined' || !modal || !modalLat || !modalLng ||
+    !modalName || !modalAddress || !modalSaveBtn || !modalCloseBtn || !addBtn ||
+    !updateBtn || !deleteBtn || !validationModal || !validationIcon ||
+    !validationTitle || !validationMessage || !validationCancel || !validationConfirm
   ) {
     console.error('Missing required DOM elements or Leaflet not loaded.');
     return;
   }
 
+  // ==========================================================
+  // VALIDATION MODAL
+  // ==========================================================
   let validationResolve = null;
+  const ICONS = { delete: '🗑️', success: '✓', error: '✕', warning: '⚠️' };
 
   function showValidationModal({
-    type = "warning",
-    title = "Warning",
-    message = "",
-    confirmText = "OK",
-    cancelText = "Cancel",
-    showCancel = true
+    type = 'warning', title = 'Warning', message = '',
+    confirmText = 'OK', cancelText = 'Cancel', showCancel = true
   }) {
     validationModal.className = `validation-modal ${type}`;
-    validationModal.classList.remove("hidden");
-
+    validationModal.classList.remove('hidden');
     validationTitle.textContent = title;
     validationMessage.innerHTML = message;
     validationConfirm.textContent = confirmText;
     validationCancel.textContent = cancelText;
-    validationCancel.style.display = showCancel ? "inline-block" : "none";
-
-    if (type === "delete") validationIcon.textContent = "🗑️";
-    else if (type === "success") validationIcon.textContent = "✓";
-    else if (type === "error") validationIcon.textContent = "✕";
-    else validationIcon.textContent = "⚠️";
-
-    return new Promise((resolve) => {
-      validationResolve = resolve;
-    });
+    validationCancel.style.display = showCancel ? 'inline-block' : 'none';
+    validationIcon.textContent = ICONS[type] || ICONS.warning;
+    return new Promise((resolve) => { validationResolve = resolve; });
   }
 
+  const alertModal = (type, title, message) =>
+    showValidationModal({ type, title, message, confirmText: 'OK', showCancel: false });
+
   function closeValidationModal(result) {
-    validationModal.classList.add("hidden");
+    validationModal.classList.add('hidden');
     if (validationResolve) {
       validationResolve(result);
       validationResolve = null;
     }
   }
 
-  validationConfirm.addEventListener("click", () => closeValidationModal(true));
-  validationCancel.addEventListener("click", () => closeValidationModal(false));
-  validationModal
-    .querySelector(".validation-modal-overlay")
-    .addEventListener("click", () => closeValidationModal(false));
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !validationModal.classList.contains("hidden")) {
+  validationConfirm.addEventListener('click', () => closeValidationModal(true));
+  validationCancel.addEventListener('click', () => closeValidationModal(false));
+  validationModal.querySelector('.validation-modal-overlay')
+    .addEventListener('click', () => closeValidationModal(false));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !validationModal.classList.contains('hidden')) {
       closeValidationModal(false);
     }
   });
@@ -96,66 +85,135 @@ document.addEventListener('DOMContentLoaded', async () => {
   // MAP SETUP
   // ==========================================================
   const southCotabatoBounds = L.latLngBounds([[5.95, 124.55], [6.65, 125.2]]);
+
+  // One shared canvas renderer: draws all dots on a single <canvas>.
+  const canvasRenderer = L.canvas({ padding: 0.5, tolerance: 6 });
+
   const map = L.map('map', {
     maxBounds: southCotabatoBounds,
     maxBoundsViscosity: 1.0,
     minZoom: 10.3,
-    maxZoom: 20.5
+    maxZoom: 20.5,
+    preferCanvas: true,
+    zoomSnap: 0.5,
+    zoomAnimation: true
   });
   map.fitBounds(southCotabatoBounds, { padding: [10, 10] });
 
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Shared tile options. `bounds` is padded by 100% so the whole visible
+  // viewport (which can be wider than the province) always gets tiles,
+  // while still avoiding downloads for the rest of the world.
+  const tileBounds = southCotabatoBounds.pad(1);
+
+  const tileCommon = {
+    bounds: tileBounds,
+    minZoom: 10.3,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+    keepBuffer: 1
+  };
+
+  const defaultLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    ...tileCommon,
+    maxZoom: 20.5,
+    maxNativeZoom: 19, // OSM has no tiles beyond 19 – upscale instead of 404s
     attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  const terminalIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
   });
 
-  const dotIcon = L.divIcon({
-    className: 'terminal-dot-icon',
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-    html: `<svg width="16" height="16" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="7" cy="7" r="6" fill="#ff0000" stroke="#fafafb83" stroke-width="2"/>
-    </svg>`
+  const satelliteLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      ...tileCommon,
+      maxZoom: 18,
+      maxNativeZoom: 18,
+      attribution:
+        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    }
+  );
+
+  defaultLayer.addTo(map);
+
+  L.control.layers(
+    { 'Default (2D)': defaultLayer, Satellite: satelliteLayer },
+    null,
+    { position: 'topright' }
+  ).addTo(map);
+
+  map.on('baselayerchange', (e) => {
+    const newMax = Number(e.layer?.options?.maxZoom) || 20.5;
+    map.setMaxZoom(newMax);
+    if (map.getZoom() > newMax) map.setZoom(newMax);
   });
 
-  // NEW: gold pin used during Update mode — the draggable ghost pin
-  const ghostPinIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [30, 48],
-    iconAnchor: [15, 48],
-    popupAnchor: [1, -40],
-    shadowSize: [48, 48]
-  });
+  // ==========================================================
+  // ICONS (inline SVG – zero network requests)
+  // ==========================================================
+  const pinSvg = (fill, w, h) => `
+    <svg width="${w}" height="${h}" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12.5 0C5.6 0 0 5.6 0 12.5 0 21.9 12.5 41 12.5 41S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z"
+            fill="${fill}" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="12.5" cy="12.5" r="4.5" fill="#fff"/>
+    </svg>`;
+
+  const makePinIcon = (fill, w, h) =>
+    L.divIcon({
+      className: 'terminal-pin-icon',
+      html: pinSvg(fill, w, h),
+      iconSize: [w, h],
+      iconAnchor: [w / 2, h],
+      popupAnchor: [1, -h + 7]
+    });
+
+  const terminalIcon = makePinIcon('#e53935', 25, 41);
+  const ghostPinIcon = makePinIcon('#fbc02d', 30, 48);
 
   const HIGHLIGHTED_TERMINAL = 'Koronadal City';
+  const isHighlighted = (name) =>
+    (name || '').trim().toLowerCase() === HIGHLIGHTED_TERMINAL.toLowerCase();
 
-  const getIconFor = (name) =>
-    (name || '').trim().toLowerCase() === HIGHLIGHTED_TERMINAL.toLowerCase()
-      ? terminalIcon
-      : dotIcon;
+  // ==========================================================
+  // MARKER FACTORY
+  // Highlighted terminal = pin marker. Everything else = canvas dot.
+  // ==========================================================
+  // FeatureGroup (not LayerGroup): it propagates child events (click) to the group.
+  const markerGroup = L.featureGroup().addTo(map);
 
-  const SHOW_LABEL_FOR_ALL = false;
+  function createMarker({ terminal_id, terminal_name, terminal_address, latitude, longitude }) {
+    const latlng = [Number(latitude), Number(longitude)];
+    let marker;
 
-  const maybeBindTooltip = (marker, name) => {
-    const isHighlighted = (name || '').trim().toLowerCase() === HIGHLIGHTED_TERMINAL.toLowerCase();
-    if (SHOW_LABEL_FOR_ALL || isHighlighted) {
-      marker.bindTooltip(name, {
+    if (isHighlighted(terminal_name)) {
+      marker = L.marker(latlng, { icon: terminalIcon });
+      marker.bindTooltip(terminal_name, {
         permanent: true,
         direction: 'right',
         offset: [14, 2],
         className: 'terminal-label'
       });
+    } else {
+      marker = L.circleMarker(latlng, {
+        renderer: canvasRenderer,
+        radius: 6,
+        color: '#fafafb',
+        weight: 2,
+        fillColor: '#ff0000',
+        fillOpacity: 1
+      });
     }
-  };
+
+    marker.terminal_id = terminal_id;
+    marker.terminal_name = terminal_name;
+    marker.terminal_address = terminal_address;
+    return marker;
+  }
+
+  // Swap marker type if highlight status changed (pin <-> dot) after an edit.
+  function replaceMarker(oldMarker, data) {
+    markerGroup.removeLayer(oldMarker);
+    const fresh = createMarker(data);
+    markerGroup.addLayer(fresh);
+    return fresh;
+  }
 
   // ==========================================================
   // MODES
@@ -164,29 +222,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   let updateMode = false;
   let deleteMode = false;
 
-  // NEW: ghost pin state
   let ghostPin = null;
   let sourceMarker = null;
-  let sourceOriginalLatLng = null;
 
-  // NEW: helper — remove ghost pin (with optional revert of nothing since
-  // the source marker never moved during the drag — it stays put)
   function removeGhostPin() {
     if (ghostPin) {
       map.removeLayer(ghostPin);
       ghostPin = null;
     }
     sourceMarker = null;
-    sourceOriginalLatLng = null;
   }
 
-  // NEW: helper — spawn ghost pin at a marker's position
   function spawnGhostPin(marker) {
     removeGhostPin();
-
     const start = marker.getLatLng();
     sourceMarker = marker;
-    sourceOriginalLatLng = L.latLng(start.lat, start.lng);
 
     ghostPin = L.marker([start.lat, start.lng], {
       icon: ghostPinIcon,
@@ -195,25 +245,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       opacity: 0.95
     }).addTo(map);
 
-    ghostPin.bindTooltip('Drag to move terminal', {
-      direction: 'top',
-      offset: [0, -46]
-    });
+    ghostPin.bindTooltip('Drag to move terminal', { direction: 'top', offset: [0, -46] });
 
     const syncCoords = (e) => {
       const ll = e.target.getLatLng();
       modalLat.textContent = ll.lat.toFixed(6);
       modalLng.textContent = ll.lng.toFixed(6);
     };
-
     ghostPin.on('drag', syncCoords);
     ghostPin.on('dragend', syncCoords);
   }
 
-  // NEW: helper — open update modal with the ghost pin
+  const showModal = ({ lat, lng, name, address }) => {
+    modalLat.textContent = lat;
+    modalLng.textContent = lng;
+    modalName.value = name || '';
+    modalAddress.value = address || '';
+    modal.classList.remove('hidden');
+    modalName.focus();
+  };
+
+  const hideModal = () => modal.classList.add('hidden');
+
   function openUpdateModal(marker) {
     spawnGhostPin(marker);
-
     const ll = marker.getLatLng();
     showModal({
       lat: ll.lat.toFixed(6),
@@ -225,212 +280,172 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const resetModes = () => {
     addMode = updateMode = deleteMode = false;
-
     addBtn.classList.remove('active');
     updateBtn.classList.remove('active');
     deleteBtn.classList.remove('active');
-
     map.dragging.enable();
-
-    // NEW: drop the ghost pin whenever modes reset
     removeGhostPin();
   };
 
-  const pending = {
-    addLat: null,
-    addLng: null,
-    updateMarker: null
-  };
-
-  const showModal = ({ lat, lng, name, address }) => {
-    modalLat.textContent = lat;
-    modalLng.textContent = lng;
-    modalName.value = name || '';
-    modalAddress.value = address || '';
-    modal.classList.remove('hidden');
-    modalName.focus();
-  };
-
-  const hideModal = () => {
-    modal.classList.add('hidden');
-  };
-
-  const clearPending = () => {
-    pending.addLat = null;
-    pending.addLng = null;
-    pending.updateMarker = null;
-  };
+  const pending = { addLat: null, addLng: null };
+  const clearPending = () => { pending.addLat = pending.addLng = null; };
 
   modalCloseBtn.addEventListener('click', () => {
     hideModal();
     clearPending();
-    removeGhostPin();     // NEW
     resetModes();
   });
 
-  // Add Mode
-  addBtn.addEventListener('click', () => {
-    if (addMode) {
-      resetModes();
+  const toggleMode = (mode, btn, onEnter) => () => {
+    const wasActive = btn.classList.contains('active');
+    resetModes();
+    if (wasActive) {
       hideModal();
-      clearPending();
+      if (mode === 'add') clearPending();
       return;
     }
-    resetModes();
+    btn.classList.add('active');
+    onEnter();
+  };
+
+  addBtn.addEventListener('click', toggleMode('add', addBtn, () => {
     addMode = true;
-    addBtn.classList.add('active');
     map.dragging.disable();
-  });
-
-  // Update Mode
-  updateBtn.addEventListener('click', () => {
-    if (updateMode) {
-      resetModes();
-      hideModal();
-      return;
-    }
-    resetModes();
-    updateMode = true;
-    updateBtn.classList.add('active');
-  });
-
-  // Delete Mode
-  deleteBtn.addEventListener('click', () => {
-    if (deleteMode) {
-      resetModes();
-      hideModal();
-      return;
-    }
-    resetModes();
-    deleteMode = true;
-    deleteBtn.classList.add('active');
-  });
+  }));
+  updateBtn.addEventListener('click', toggleMode('update', updateBtn, () => { updateMode = true; }));
+  deleteBtn.addEventListener('click', toggleMode('delete', deleteBtn, () => { deleteMode = true; }));
 
   // ==========================================================
-  // DELETE HELPER
+  // DELETE
   // ==========================================================
   async function handleDeleteMarker(marker) {
+    const name = marker.terminal_name || 'this terminal';
     const confirmed = await showValidationModal({
-      type: "delete",
-      title: "Delete Terminal?",
-      message: `Permanently delete <span class="highlight-value">${marker.terminal_name || 'this terminal'}</span>? This cannot be undone.`,
-      confirmText: "Delete",
-      cancelText: "Cancel",
+      type: 'delete',
+      title: 'Delete Terminal?',
+      message: `Permanently delete <span class="highlight-value">${name}</span>? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
       showCancel: true
     });
-
     if (!confirmed) return;
 
     try {
-      const delRes = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
+      const res = await fetch(`/DeleteTerminalLocation/${marker.terminal_id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
-      const delResult = await delRes.json();
+      const result = await res.json();
 
-      if (delResult.error) {
-        await showValidationModal({
-          type: "error",
-          title: "Delete Failed",
-          message: delResult.error,
-          confirmText: "OK",
-          showCancel: false
-        });
+      if (result.error) {
+        await alertModal('error', 'Delete Failed', result.error);
         return;
       }
 
-      map.removeLayer(marker);
-
-      await showValidationModal({
-        type: "success",
-        title: "Terminal Deleted",
-        message: "The terminal was removed successfully.",
-        confirmText: "OK",
-        showCancel: false
-      });
+      markerGroup.removeLayer(marker);
+      cacheTerminals();
+      await alertModal('success', 'Terminal Deleted', 'The terminal was removed successfully.');
     } catch (err) {
       console.error(err);
-      await showValidationModal({
-        type: "error",
-        title: "Delete Failed",
-        message: "Something went wrong while deleting this terminal.",
-        confirmText: "OK",
-        showCancel: false
-      });
+      await alertModal('error', 'Delete Failed', 'Something went wrong while deleting this terminal.');
     }
   }
 
   // ==========================================================
-  // FETCH TERMINALS + RENDER MARKERS
+  // CLICK HANDLING – one delegated handler for ALL markers
   // ==========================================================
-  const markers = [];
+  markerGroup.on('click', async (e) => {
+    const marker = e.layer;
+    if (updateMode) {
+      openUpdateModal(marker);
+    } else if (deleteMode) {
+      await handleDeleteMarker(marker);
+    }
+  });
 
-  try {
-    const res = await fetch('/terminals');
-    const data = await res.json();
-    const terminals = data.terminals || [];
+  // ==========================================================
+  // LOAD TERMINALS (cached render first, then fresh data)
+  // ==========================================================
+  const CACHE_KEY = 'terminals_cache_v1';
 
-    terminals.forEach(term => {
-      const marker = L.marker([term.latitude, term.longitude], { icon: getIconFor(term.terminal_name) }).addTo(map);
-      marker.terminal_id = term.terminal_id;
-      marker.terminal_name = term.terminal_name;
-      marker.terminal_address = term.terminal_address;
-      maybeBindTooltip(marker, term.terminal_name);
-      markers.push(marker);
-    });
-  } catch (err) {
-    console.error(err);
-    await showValidationModal({
-      type: "error",
-      title: "Load Failed",
-      message: "Failed to load terminals.",
-      confirmText: "OK",
-      showCancel: false
-    });
+  function renderTerminals(list) {
+    markerGroup.clearLayers();
+    const frag = list.map(createMarker);
+    frag.forEach((m) => markerGroup.addLayer(m));
   }
 
-  // Map click for Add
+  function cacheTerminals() {
+    try {
+      const list = [];
+      markerGroup.eachLayer((m) => {
+        const ll = m.getLatLng();
+        list.push({
+          terminal_id: m.terminal_id,
+          terminal_name: m.terminal_name,
+          terminal_address: m.terminal_address,
+          latitude: ll.lat,
+          longitude: ll.lng
+        });
+      });
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
+    } catch (_) { /* storage unavailable – ignore */ }
+  }
+
+  let cachedRaw = null;
+  try {
+    cachedRaw = sessionStorage.getItem(CACHE_KEY);
+    if (cachedRaw) renderTerminals(JSON.parse(cachedRaw)); // instant on repeat visits
+  } catch (_) { cachedRaw = null; }
+
+  terminalsPromise
+    .then((data) => {
+      const terminals = data.terminals || [];
+      const fresh = JSON.stringify(terminals);
+      if (fresh !== cachedRaw) {
+        renderTerminals(terminals);
+        try { sessionStorage.setItem(CACHE_KEY, fresh); } catch (_) {}
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      if (!cachedRaw) alertModal('error', 'Load Failed', 'Failed to load terminals.');
+    });
+
+  // ==========================================================
+  // MAP CLICK (Add)
+  // ==========================================================
   map.on('click', (e) => {
     if (!addMode) return;
-
     const lat = e.latlng.lat.toFixed(6);
     const lng = e.latlng.lng.toFixed(6);
-
     pending.addLat = lat;
     pending.addLng = lng;
-    pending.updateMarker = null;
-
     showModal({ name: '', address: '', lat, lng });
   });
 
   // ==========================================================
-  // SAVE MODAL (Add + Update)
+  // SAVE (Add + Update)
   // ==========================================================
   modalSaveBtn.addEventListener('click', async () => {
     const terminal_name = modalName.value.trim();
     const terminal_address = modalAddress.value.trim();
 
+    const validate = async () => {
+      if (!terminal_name) {
+        await alertModal('warning', 'Missing Name', 'Terminal Name is required.');
+        return false;
+      }
+      if (!terminal_address) {
+        await alertModal('warning', 'Missing Address', 'Terminal Address is required.');
+        return false;
+      }
+      return true;
+    };
+
     // ---------- ADD ----------
     if (addMode) {
       if (!pending.addLat || !pending.addLng) return;
-
-      if (!terminal_name) {
-        await showValidationModal({
-          type: "warning", title: "Missing Name",
-          message: "Terminal Name is required.",
-          confirmText: "OK", showCancel: false
-        });
-        return;
-      }
-
-      if (!terminal_address) {
-        await showValidationModal({
-          type: "warning", title: "Missing Address",
-          message: "Terminal Address is required.",
-          confirmText: "OK", showCancel: false
-        });
-        return;
-      }
+      if (!(await validate())) return;
 
       try {
         const response = await fetch('/AddTerminalLocation', {
@@ -443,90 +458,49 @@ document.addEventListener('DOMContentLoaded', async () => {
             longitude: pending.addLng
           })
         });
-
         const result = await response.json();
 
         if (result.error) {
-          await showValidationModal({
-            type: "error", title: "Add Failed", message: result.error,
-            confirmText: "OK", showCancel: false
-          });
+          await alertModal('error', 'Add Failed', result.error);
           return;
         }
 
-        const marker = L.marker([pending.addLat, pending.addLng], { icon: getIconFor(terminal_name) }).addTo(map);
-        marker.terminal_id = result.terminal_id;
-        marker.terminal_name = terminal_name;
-        marker.terminal_address = terminal_address;
-
-        maybeBindTooltip(marker, terminal_name);
-
-        marker.on('click', async () => {
-          if (updateMode) {
-            openUpdateModal(marker);   // NEW
-            return;
-          }
-          if (deleteMode) {
-            await handleDeleteMarker(marker);
-          }
-        });
-
-        markers.push(marker);
+        markerGroup.addLayer(createMarker({
+          terminal_id: result.terminal_id,
+          terminal_name,
+          terminal_address,
+          latitude: pending.addLat,
+          longitude: pending.addLng
+        }));
+        cacheTerminals();
 
         hideModal();
         clearPending();
         resetModes();
-
-        await showValidationModal({
-          type: "success", title: "Terminal Added",
-          message: "The terminal was added successfully.",
-          confirmText: "OK", showCancel: false
-        });
+        await alertModal('success', 'Terminal Added', 'The terminal was added successfully.');
       } catch (err) {
         console.error(err);
-        await showValidationModal({
-          type: "error", title: "Add Failed",
-          message: "Failed to add terminal.",
-          confirmText: "OK", showCancel: false
-        });
+        await alertModal('error', 'Add Failed', 'Failed to add terminal.');
       }
       return;
     }
 
     // ---------- UPDATE ----------
     if (updateMode) {
-      // NEW: source comes from the ghost pin, not from pending.updateMarker
       if (!ghostPin || !sourceMarker) return;
-
-      if (!terminal_name) {
-        await showValidationModal({
-          type: "warning", title: "Missing Name",
-          message: "Terminal Name is required.",
-          confirmText: "OK", showCancel: false
-        });
-        return;
-      }
-
-      if (!terminal_address) {
-        await showValidationModal({
-          type: "warning", title: "Missing Address",
-          message: "Terminal Address is required.",
-          confirmText: "OK", showCancel: false
-        });
-        return;
-      }
+      if (!(await validate())) return;
 
       try {
-        // NEW: new coordinates come from the ghost pin
         const ll = ghostPin.getLatLng();
         const newLat = ll.lat.toFixed(6);
         const newLng = ll.lng.toFixed(6);
+        const terminal_id = sourceMarker.terminal_id;
 
         const response = await fetch('/UpdateTerminalLocation', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            terminal_id: sourceMarker.terminal_id,
+            terminal_id,
             terminal_name,
             terminal_address,
             latitude: newLat,
@@ -534,62 +508,35 @@ document.addEventListener('DOMContentLoaded', async () => {
           })
         });
 
-        if (!response.ok) throw new Error("Server error");
+        if (!response.ok) throw new Error('Server error');
         const result = await response.json();
 
         if (result.error) {
-          await showValidationModal({
-            type: "error", title: "Update Failed", message: result.error,
-            confirmText: "OK", showCancel: false
-          });
+          await alertModal('error', 'Update Failed', result.error);
           return;
         }
 
-        // NEW: move the actual terminal marker to the new position
-        sourceMarker.setLatLng([newLat, newLng]);
-        sourceMarker.terminal_name = terminal_name;
-        sourceMarker.terminal_address = terminal_address;
-        sourceMarker.setIcon(getIconFor(terminal_name));
-
-        if (sourceMarker.getTooltip()) sourceMarker.unbindTooltip();
-        maybeBindTooltip(sourceMarker, terminal_name);
+        replaceMarker(sourceMarker, {
+          terminal_id,
+          terminal_name,
+          terminal_address,
+          latitude: newLat,
+          longitude: newLng
+        });
+        cacheTerminals();
 
         hideModal();
         clearPending();
-        resetModes();     // drops ghost pin
-
-        await showValidationModal({
-          type: "success", title: "Terminal Updated",
-          message: "The terminal was updated successfully.",
-          confirmText: "OK", showCancel: false
-        });
+        resetModes();
+        await alertModal('success', 'Terminal Updated', 'The terminal was updated successfully.');
       } catch (err) {
         console.error(err);
-        await showValidationModal({
-          type: "error", title: "Update Failed",
-          message: "Failed to update terminal.",
-          confirmText: "OK", showCancel: false
-        });
+        await alertModal('error', 'Update Failed', 'Failed to update terminal.');
       }
       return;
     }
 
     resetModes();
     clearPending();
-  });
-
-  // ==========================================================
-  // MARKER INTERACTIONS (existing markers on page load)
-  // ==========================================================
-  markers.forEach(marker => {
-    marker.on('click', async () => {
-      if (updateMode) {
-        openUpdateModal(marker);   // NEW
-        return;
-      }
-      if (deleteMode) {
-        await handleDeleteMarker(marker);
-      }
-    });
   });
 });

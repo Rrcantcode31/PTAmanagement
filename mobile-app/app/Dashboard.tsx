@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { usePathname } from "expo-router";
 import WebView from "react-native-webview";
+import { BlurView, BlurTargetView } from "expo-blur";
 import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -115,6 +116,7 @@ export default function Dashboard() {
   const pathname = usePathname();
   const { user, token } = useAuth();
   const webViewRef = useRef<WebView>(null);
+  const mapTargetRef = useRef(null);
 
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
@@ -122,8 +124,6 @@ export default function Dashboard() {
   const [tripPlan, setTripPlan] = useState<TripPlan | null>(null);
   const [loadingTrip, setLoadingTrip] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  // NEW: trip detail expand/collapse
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -359,7 +359,6 @@ export default function Dashboard() {
   const totalDiscountedT = fareLegs.reduce((s, l) => s + (l.fare?.discounted_t ?? 0), 0);
   const totalDiscountedM = fareLegs.reduce((s, l) => s + (l.fare?.discounted_m ?? 0), 0);
 
-  // Trip totals for the collapsed summary
   const totalDistance = safeLegs.reduce((s, l) => s + l.route.distance_km, 0);
   const totalDuration = safeLegs.reduce((s, l) => s + l.route.duration_min, 0);
   const fareLow = fareLegs.length > 0
@@ -386,7 +385,7 @@ export default function Dashboard() {
     return styles.legBadgeMid;
   };
 
-  // Leaflet HTML
+  // Leaflet HTML — zoomControl disabled
   const leafletMapHTML = `
     <!DOCTYPE html>
     <html>
@@ -398,6 +397,12 @@ export default function Dashboard() {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; overflow: hidden; }
         #map { position: absolute; inset: 0; }
+
+        /* Hide the zoom control and attribution if present */
+        .leaflet-control-zoom,
+        .leaflet-control-attribution {
+          display: none !important;
+        }
       </style>
     </head>
     <body>
@@ -530,6 +535,8 @@ export default function Dashboard() {
         function initMap() {
           const b = L.latLngBounds([[5.95, 124.53], [6.65, 125.4]]);
           map = L.map('map', {
+            zoomControl: false,                    // ← no +/- buttons
+            attributionControl: false,             // ← no attribution line
             maxBounds: b,
             maxBoundsViscosity: 1.0,
             minZoom: 11,
@@ -537,7 +544,6 @@ export default function Dashboard() {
           });
           map.fitBounds(b, { padding: [10, 10] });
           L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19,
           }).addTo(map);
         }
@@ -556,8 +562,8 @@ export default function Dashboard() {
       >
         <View style={styles.overlay}>
 
-          {/* ===== FULL-SCREEN MAP ===== */}
-          <View style={StyleSheet.absoluteFill}>
+          {/* ===== FULL-SCREEN MAP (wrapped as blur target) ===== */}
+          <BlurTargetView ref={mapTargetRef} style={StyleSheet.absoluteFill}>
             <WebView
               ref={webViewRef}
               originWhitelist={["*"]}
@@ -597,20 +603,19 @@ export default function Dashboard() {
                 }
               }}
             />
+          </BlurTargetView>
+
+          {/* ===== HEADER CARD ===== */}
+          <View style={styles.headerCard}>
+            <Text style={styles.welcome}>Dashboard</Text>
+            <Text style={styles.greeting} numberOfLines={1}>
+              {greetingText()}, {displayName}
+            </Text>
           </View>
 
-          {/* ===== COMPACT TOP CARD ===== */}
-          <View style={styles.topCard}>
+          {/* ===== FIELD CARD ===== */}
+          <View style={styles.fieldCard}>
 
-            {/* Compact header: title + greeting in one line */}
-            <View style={styles.headerRow}>
-              <Text style={styles.welcome}>Dashboard</Text>
-              <Text style={styles.greeting} numberOfLines={1}>
-                {greetingText()}, {displayName}
-              </Text>
-            </View>
-
-            {/* TO field — compact */}
             <TouchableOpacity
               style={styles.field}
               onPress={() => setPickerOpen(true)}
@@ -632,7 +637,6 @@ export default function Dashboard() {
               )}
             </TouchableOpacity>
 
-            {/* Compact trip summary — appears once a destination is picked */}
             {tripActive && !loadingTrip && safeLegs.length > 0 && (
               <TouchableOpacity
                 style={styles.summaryRow}
@@ -680,7 +684,6 @@ export default function Dashboard() {
               </View>
             )}
 
-            {/* Expanded breakdown — only when user taps the summary */}
             {tripActive && detailsOpen && safeLegs.length > 0 && (
               <View style={styles.details}>
                 <ScrollView
@@ -735,12 +738,21 @@ export default function Dashboard() {
             )}
           </View>
 
-          {/* ===== BOTTOM NAV ===== */}
-          <View style={styles.navRow}>
-            <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-            <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
-            <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
-            <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
+          {/* ===== BOTTOM NAV (frosted glass) ===== */}
+          <View style={styles.navRowWrap}>
+            <BlurView
+              intensity={80}
+              tint="light"
+              blurMethod="dimezisBlurView"
+              blurTarget={mapTargetRef}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.navRow}>
+              <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+              <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
+              <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
+              <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
+            </View>
           </View>
 
         </View>
@@ -802,33 +814,33 @@ const styles = StyleSheet.create({
   overlay: { flex: 1 },
 
   // ============================================================
-  // COMPACT TOP CARD — floats over the map
+  // HEADER CARD
   // ============================================================
-  topCard: {
+  headerCard: {
     position: "absolute",
     top: 10,
     left: 15,
     right: 15,
     zIndex: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(210, 230, 224, 0.9)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-
-  // Header: one compact line
-  headerRow: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    marginBottom: 10,
     gap: 8,
+
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    borderTopRightRadius: 14,
+    borderTopLeftRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderWidth: 1,
+    borderColor: "rgba(210, 230, 224, 0.9)",
+
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 6,
   },
   welcome: {
     fontSize: 16,
@@ -844,7 +856,32 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  // Compact field
+  // ============================================================
+  // FIELD CARD
+  // ============================================================
+  fieldCard: {
+    position: "absolute",
+    top: 66,
+    left: 15,
+    right: 15,
+    zIndex: 9,
+
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    borderBottomRightRadius: 14,
+    borderBottomLeftRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+
+    borderWidth: 1,
+    borderColor: "rgba(210, 230, 224, 0.9)",
+
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -856,6 +893,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+
   fieldText: {
     flex: 1,
     fontSize: 13,
@@ -863,7 +901,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
   },
 
-  // Compact trip summary (collapsed state)
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -874,6 +911,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f7f5",
     borderRadius: 11,
   },
+
   summaryPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -885,12 +923,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#dcebe6",
   },
+
   summaryText: {
     fontSize: 10,
     fontFamily: "monsterrat_font",
     fontWeight: "700",
     color: "#2c7a6e",
   },
+
   loadingText: {
     fontSize: 11,
     fontFamily: "monster_act",
@@ -898,7 +938,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Expanded details
   details: {
     marginTop: 10,
     paddingTop: 10,
@@ -912,10 +951,12 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 6,
   },
+
   legBadge: {
     width: 22, height: 22, borderRadius: 11,
     alignItems: "center", justifyContent: "center",
   },
+  
   legBadgeFirst: { backgroundColor: "#2196F3" },
   legBadgeMid: { backgroundColor: "#f39c12" },
   legBadgeLast: { backgroundColor: "#e74c3c" },
@@ -925,9 +966,11 @@ const styles = StyleSheet.create({
     fontFamily: "monsterrat_kp",
     color: "#1a1a1a",
   },
+
   hubTag: {
     fontSize: 10, fontFamily: "monster_act", color: "#7f9f97",
   },
+
   legStats: {
     fontSize: 10,
     fontFamily: "monster_act",
@@ -943,12 +986,14 @@ const styles = StyleSheet.create({
     borderColor: "#dcebe6",
     marginTop: 8,
   },
+
   fareRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 4,
   },
+
   fareLabel: { fontSize: 12, fontFamily: "monster_act", color: "#1a1a1a" },
   fareValue: {
     fontSize: 13,
@@ -956,6 +1001,7 @@ const styles = StyleSheet.create({
     color: "#2c7a6e",
     fontWeight: "700",
   },
+
   fareDivider: {
     height: 0.5,
     backgroundColor: "#dcebe6",
@@ -975,28 +1021,38 @@ const styles = StyleSheet.create({
   },
 
   // ============================================================
-  // BOTTOM NAV
+  // BOTTOM NAV — frosted glass container
   // ============================================================
-  navRow: {
+  navRowWrap: {
     position: "absolute",
     bottom: 25,
-    width: "90%",
+    width: "95%",
     alignSelf: "center",
     zIndex: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    borderRadius: 24,
     height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.94)",
+    borderRadius: 24,
+    overflow: "hidden",
+
     borderWidth: 0.8,
-    borderColor: "rgba(255, 255, 255, 0.25)",
+    borderColor: "rgba(255, 255, 255, 0.55)",
+
+    // Subtle translucent white over the blur for extra readability
+    backgroundColor: "rgba(255, 255, 255, 0.28)",
+
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 6,
+  },
+
+  // Inner layout — no background, no rounding — the wrapper provides them
+  navRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
   },
 
   // ============================================================

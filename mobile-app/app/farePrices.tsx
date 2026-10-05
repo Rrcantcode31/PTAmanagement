@@ -86,18 +86,20 @@ export default function FarePrices() {
         style={{ flex: 1 }}
         resizeMode="cover"
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.38)' }}>
+        <View style={styles.overlay}>
 
-          <ScrollView contentContainerStyle={styles.container}>
-            <View style={styles.header}>
-              <Text style={styles.welcome}>Fare prices</Text>
-              <Text style={styles.noticeBrand}>
-                LTFRB. This app only displays the approved fare matrix and does
-                not modify or set any fare amount.
-              </Text>
-            </View>
+          {/* ===== HEADER CARD ===== */}
+          <View style={styles.headerCard}>
+            <Text style={styles.welcome}>Fare prices</Text>
+            <Text style={styles.noticeBrand}>
+              LTFRB. This app only displays the approved fare matrix and does
+              not modify or set any fare amount.
+            </Text>
+          </View>
 
-            <BlurView intensity={40} tint="light" style={styles.FareContainer}>
+          {/* ===== TABLE CARD ===== */}
+          <View style={styles.tableCard}>
+            <BlurView intensity={40} tint="light" style={styles.blurFill}>
 
               {loading && (
                 <View style={styles.stateBox}>
@@ -120,7 +122,11 @@ export default function FarePrices() {
               )}
 
               {!loading && !error && groups.length > 0 && (
-                <ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
+                <ScrollView
+                  horizontal={true}
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalScroll}
+                >
                   <View style={styles.tableWrapper}>
 
                     <Text style={styles.TextHeader}>Public Terminal Fare Prices</Text>
@@ -179,8 +185,9 @@ export default function FarePrices() {
               )}
 
             </BlurView>
-          </ScrollView>
+          </View>
 
+          {/* ===== BOTTOM NAV ===== */}
           <View style={styles.row}>
              <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
               <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
@@ -204,58 +211,118 @@ const NUM_GAPS    = 6;
 const TABLE_WIDTH = (COL_ROUTE + COL_TO + COL_KM + COL_FARE * 4) + GAP * NUM_GAPS;
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1 },
+  safeArea: { flex: 1 },
 
-  container: { 
-    flexGrow: 1, 
-    paddingBottom: 100 },
+  // Transparent wrapper — the ImageBackground shows through the whole screen
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.38)',
+  },
 
-  header: {
-    paddingHorizontal: 10,
-    paddingTop: 15,
-    paddingBottom: 1,      
+  // ============================================================
+  // HEADER CARD — "Fare prices" + LTFRB notice
+  // ============================================================
+  headerCard: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 8,
+
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderTopRightRadius: 14,
+    borderTopLeftRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderWidth: 1,
+     borderColor: 'rgba(233, 240, 238, 0.44)',
+
+    shadowColor: '#f8f8f8',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 4,
   },
 
   welcome: {
     fontSize: 18,
     fontFamily: "monsterrat_kp",
     color: '#1f6f66',
+    marginBottom: 2,
   },
 
   noticeBrand: {
-    color: '#272624',
-    fontFamily: "monsterrat_font",
-    fontSize: 12,
+    color: '#2d2d2b81',
+    fontFamily: "monster_act",
+    fontSize: 11,
+    lineHeight: 15,
   },
 
-  FareContainer: {
-    borderBottomRightRadius: 20,
-    borderBottomLeftRadius: 20,
+  // ============================================================
+  // TABLE CARD — big rounded container below the header
+  // ============================================================
+  tableCard: {
+    flex: 1,
+    marginHorizontal: 12,
+    marginBottom: 92,           // space for the floating bottom nav
+    borderBottomRightRadius: 14,
+    borderBottomLeftRadius: 14,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.55)',
-    borderWidth: 0.3,
-    borderColor: 'rgb(240, 233, 233)',
-    marginHorizontal: 5,
-    marginTop: 2,
-    marginBottom: 5,
-    padding: 5,
-    minHeight: 300,
-    maxHeight: 650,
-    shadowColor: '#f9f9f956',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
+
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(233, 240, 238, 0.44)',
+
+    shadowColor: '#f8f8f8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
     shadowRadius: 10,
-    elevation: 10,
+    elevation: 5,
   },
 
-  stateBox: { paddingVertical: 50, alignItems: 'center', justifyContent: 'center' },
-  stateText: { marginTop: 10, color: '#666', fontSize: 12, fontFamily: "monster_act" },
-  errorText: { color: '#c33', fontSize: 13, fontFamily: "monster_act" },
+  // BlurView fills the table card
+  blurFill: {
+    flex: 1,
+  },
 
+  // Horizontal scroll area inside the table card
+  horizontalScroll: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+  },
+
+  // ============================================================
+  // STATE (loading / error / empty)
+  // ============================================================
+  stateBox: {
+    flex: 1,
+    paddingVertical: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 12,
+    fontFamily: "monster_act",
+  },
+  errorText: {
+    color: '#c33',
+    fontSize: 13,
+    fontFamily: "monster_act",
+  },
+
+  // ============================================================
+  // TABLE
+  // ============================================================
   tableWrapper: { width: TABLE_WIDTH },
 
-  TextHeader: { color: '#319086', fontSize: 14, padding: 8, fontFamily: "monsterrat_kp" },
+  TextHeader: {
+    color: '#319086',
+    fontSize: 14,
+    padding: 8,
+    fontFamily: "monsterrat_kp",
+  },
 
   headerRow: {
     flexDirection: 'row',
@@ -301,6 +368,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#319086',
   },
+  
   groupTitle: {
     fontSize: 13,
     color: '#319086',
@@ -315,7 +383,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.3,
     borderBottomColor: '#d9e6e3',
   },
+
   dataRowAlt: { backgroundColor: 'rgba(237, 246, 243, 0.5)' },
+
   dataCell: {
     fontSize: 11,
     color: '#1f3d38',
@@ -324,6 +394,7 @@ const styles = StyleSheet.create({
     width: 94,
     paddingHorizontal: 4,
   },
+
   dataCellFare: {
     fontSize: 11,
     color: '#23786f',
@@ -334,10 +405,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
- row: {
+  // ============================================================
+  // BOTTOM NAV
+  // ============================================================
+  row: {
     position: "absolute",
     bottom: 25,
-    width: "90%",
+    width: "95%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",

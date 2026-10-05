@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
-  FlatList, ActivityIndicator, Dimensions,
+  FlatList, ActivityIndicator, Dimensions, Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +14,10 @@ import { API_URL } from "./_layout";
 import { useAuth } from "../appContext/authContext";
 
 const { height: H } = Dimensions.get("window");
+
+const HEADER_TOP = 12;
+const EXPANDED_RATIO = 0.75;
+const COLLAPSED_VISIBLE_ROWS = 1;
 
 // ---------- Types ----------
 type Terminal = {
@@ -165,6 +169,7 @@ export default function Mapping() {
   const [queue, setQueue]               = useState<QueueItem[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [expanded, setExpanded]         = useState(false);
 
   const mapTargetRef = useRef(null);
 
@@ -187,9 +192,7 @@ export default function Mapping() {
         const data = await res.json();
         const all: Terminal[] = data.terminals || [];
 
-        const others = all.filter(
-          (t) => t.terminal_name !== "Koronadal City"
-        );
+        const others = all.filter((t) => t.terminal_name !== "Koronadal City");
         setTerminals(others);
 
         const hub = all.find((t) => t.terminal_name === "Koronadal City") || null;
@@ -202,7 +205,12 @@ export default function Mapping() {
 
   // ---- Fetch queue when a terminal is selected ----
   useEffect(() => {
-    if (!selected) return;
+    if (!selected) {
+      setQueue([]);
+      setExpanded(false);
+      return;
+    }
+
     (async () => {
       try {
         setLoadingQueue(true);
@@ -211,11 +219,7 @@ export default function Mapping() {
           { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } }
         );
         const json = await res.json();
-        if (json.success && json.data) {
-          setQueue(json.data.queue || []);
-        } else {
-          setQueue([]);
-        }
+        setQueue(json.success && json.data ? (json.data.queue || []) : []);
       } catch (err) {
         console.error("queue fetch failed:", err);
         setQueue([]);
@@ -229,14 +233,94 @@ export default function Mapping() {
 
   const leafletHTML = buildLeafletHTML(koronadal, selected);
 
-  // Queue drop only shows when a terminal is picked AND there's a queue
-  const showQueueDrop = !!selected && queue.length > 0;
+  const hasTerminal = !!selected;
+  const hasQueue    = queue.length > 0;
+  const isExpanded  = expanded && hasQueue;
+
+  const renderPanelBody = () => {
+    if (loadingQueue) {
+      return (
+        <View style={styles.stateBox}>
+          <ActivityIndicator size="small" color="#2c7a6e" />
+          <Text style={styles.stateText}>Loading queue…</Text>
+        </View>
+      );
+    }
+
+    if (!hasQueue) {
+      return (
+        <View style={styles.stateBox}>
+          <Ionicons name="car-outline" size={28} color="#7f9f97" />
+          <Text style={styles.stateText}>No vehicle available yet</Text>
+        </View>
+      );
+    }
+
+    const visibleQueue = isExpanded
+      ? queue
+      : queue.slice(0, COLLAPSED_VISIBLE_ROWS);
+
+    return (
+      <>
+        <ScrollView
+          style={isExpanded ? { flex: 1 } : undefined}
+          scrollEnabled={isExpanded}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+        >
+          {visibleQueue.map((q, idx) => (
+            <View
+              key={q.queue_id}
+              style={[styles.queuePill, idx === 0 && styles.queuePillFirst]}
+            >
+              <View style={[styles.queuePos, idx === 0 && styles.queuePosFirst]}>
+                <Text style={styles.queuePosText}>#{q.queue_position}</Text>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.queueName} numberOfLines={1}>
+                  {q.driver_name}
+                </Text>
+                <Text style={styles.queueSub} numberOfLines={1}>
+                  {q.plate_number} · {q.vehicle_type}
+                </Text>
+              </View>
+
+              <Text
+                style={[
+                  styles.queueStatus,
+                  idx === 0 ? styles.statusNext : styles.statusWait,
+                ]}
+              >
+                {idx === 0 ? "Next" : "Waiting"}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        <Pressable
+          onPress={() => setExpanded(!expanded)}
+          style={styles.toggleBar}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={16}
+            color="#2c7a6e"
+          />
+          <Text style={styles.toggleText}>
+            {isExpanded ? "Collapse" : `Show all ${queue.length} queued`}
+          </Text>
+        </Pressable>
+      </>
+    );
+  };
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <View style={styles.root}>
 
-        {/* ---------- FULL-SCREEN MAP ---------- */}
+        {/* Full-screen map */}
         <BlurTargetView ref={mapTargetRef} style={StyleSheet.absoluteFill}>
           <WebView
             originWhitelist={["*"]}
@@ -249,7 +333,7 @@ export default function Mapping() {
           />
         </BlurTargetView>
 
-        {/* ---------- TOP OVERLAY ---------- */}
+        {/* Top overlay */}
         <View style={styles.topOverlay}>
 
           {/* ============ HEADER CARD ============ */}
@@ -265,6 +349,9 @@ export default function Mapping() {
             <View style={styles.headerRow}>
               <Text style={styles.headerTitle}>Terminal Route</Text>
 
+              {/* ==============================================
+                  SELECT TERMINAL BUTTON
+              ============================================== */}
               <TouchableOpacity
                 style={styles.selectBtn}
                 onPress={() => setDropdownOpen(true)}
@@ -277,14 +364,17 @@ export default function Mapping() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.handleWrap}>
-              <View style={styles.handle} />
-            </View>
+            {/* Toggle handle line REMOVED from the header card */}
           </View>
 
-          {/* ============ QUEUE DROP CARD ============ */}
-          {showQueueDrop && (
-            <View style={styles.queueDrop}>
+          {/* ============ QUEUE / CONTENT PANEL ============ */}
+          {hasTerminal && (
+            <View
+              style={[
+                styles.queuePanel,
+                isExpanded && { height: H * EXPANDED_RATIO },
+              ]}
+            >
               <BlurView
                 intensity={100}
                 tint="light"
@@ -293,60 +383,28 @@ export default function Mapping() {
                 style={StyleSheet.absoluteFill}
               />
 
-              <View style={styles.queueDropContent}>
-                {loadingQueue ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#2c7a6e"
-                    style={{ marginVertical: 20 }}
-                  />
-                ) : (
-                  <ScrollView
-                    style={{ maxHeight: 240 }}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 8 }}
-                  >
-                    {queue.map((q, idx) => (
-                      <View
-                        key={q.queue_id}
-                        style={[
-                          styles.queuePill,
-                          idx === 0 && styles.queuePillFirst,
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.queuePos,
-                            idx === 0 && styles.queuePosFirst,
-                          ]}
-                        >
-                          <Text style={styles.queuePosText}>
-                            #{q.queue_position}
-                          </Text>
-                        </View>
+              <View style={styles.queuePanelContent}>
+                {renderPanelBody()}
+              </View>
+            </View>
+          )}
 
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.queueName} numberOfLines={1}>
-                            {q.driver_name}
-                          </Text>
-                          <Text style={styles.queueSub} numberOfLines={1}>
-                            {q.plate_number} · {q.vehicle_type}
-                          </Text>
-                        </View>
-
-                        <Text
-                          style={[
-                            styles.queueStatus,
-                            idx === 0 ? styles.statusNext : styles.statusWait,
-                          ]}
-                        >
-                          {idx === 0 ? "Next" : "Waiting"}
-                        </Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-
+          {/* When no terminal is picked, still show the prompt card */}
+          {!hasTerminal && (
+            <View style={styles.queuePanel}>
+              <BlurView
+                intensity={100}
+                tint="light"
+                blurMethod="dimezisBlurView"
+                blurTarget={mapTargetRef}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.queuePanelContent}>
+                <View style={styles.stateBox}>
+                  <Ionicons name="location-outline" size={26} color="#7f9f97" />
+                  <Text style={styles.stateText}>Please select terminal</Text>
+                </View>
+                {/* Handle kept in the panel */}
                 <View style={styles.handleWrap}>
                   <View style={styles.handle} />
                 </View>
@@ -355,17 +413,17 @@ export default function Mapping() {
           )}
         </View>
 
-        {/* ---------- BOTTOM NAV ---------- */}
+        {/* Bottom nav */}
         <View style={styles.row}>
           <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
           <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
           <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple" active={pathname === "/farePrices"} />
           <GridNavButton title="Profile" route="/profile" icon="account-circle" active={pathname === "/profile"} />
-          </View>
+        </View>
 
       </View>
 
-      {/* ---------- DROPDOWN MODAL ---------- */}
+      {/* Dropdown modal */}
       <Modal
         transparent
         visible={dropdownOpen}
@@ -417,25 +475,21 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#e9efe9" },
   root: { flex: 1, backgroundColor: "#e9efe9" },
 
-  // ============================================================
-  // Top overlay (holds header card + optional queue drop)
-  // ============================================================
   topOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 15,
-    paddingTop: 12,
+    paddingTop: HEADER_TOP,
     zIndex: 10,
     gap: 10,
   },
 
-  // ============================================================
-  // Header card — "Terminal Route" + Select terminal button
-  // ============================================================
+  // ---------- Header card ----------
   headerCard: {
-    borderRadius: 24,
+    borderTopRightRadius: 14,
+    borderTopLeftRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.7)",
@@ -445,21 +499,24 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,     // even padding since we removed the handle
     gap: 10,
   },
+
   headerTitle: {
     fontSize: 16,
     fontFamily: "monsterrat_kp",
     color: "#1a1a1a",
     flexShrink: 0,
   },
+
+  // ---------- Select terminal button ----------
   selectBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -480,11 +537,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // Drag-handle hint (used at bottom of both cards)
+  // Handle (kept in the queue panel)
   handleWrap: {
     alignItems: "center",
     paddingTop: 10,
-    paddingBottom: 12,
+    paddingBottom: 6,
   },
   handle: {
     width: 44,
@@ -493,11 +550,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#c8d4d0",
   },
 
-  // ============================================================
-  // Queue drop card — appears below header when there are queue items
-  // ============================================================
-  queueDrop: {
-    borderRadius: 24,
+  // ---------- Panel ----------
+  queuePanel: {
+     borderBottomRightRadius: 14,
+    borderBottomLeftRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.7)",
@@ -507,16 +563,32 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-  queueDropContent: {
+  queuePanelContent: {
+    flex: 1,
     paddingHorizontal: 12,
     paddingTop: 12,
+    paddingBottom: 8,
   },
 
-  // Each queue row as a self-contained pill (matches the wireframe)
+  stateBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    gap: 8,
+  },
+
+  stateText: {
+    fontSize: 12,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    textAlign: "center",
+  },
+
+  // ---------- Queue rows ----------
   queuePill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(200, 220, 215, 0.9)",
@@ -528,7 +600,6 @@ const styles = StyleSheet.create({
     borderColor: "#D85A30",
     backgroundColor: "rgba(255, 244, 240, 0.95)",
   },
-
   queuePos: {
     backgroundColor: "#2c7a6e",
     borderRadius: 12,
@@ -567,13 +638,30 @@ const styles = StyleSheet.create({
   statusNext: { backgroundColor: "#ffe6d6", color: "#b8491d" },
   statusWait: { backgroundColor: "#fff0db", color: "#c97e00" },
 
-  // ============================================================
-  // Bottom nav
-  // ============================================================
+  toggleBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 6,
+    marginTop: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(200, 220, 215, 0.7)",
+  },
+
+  toggleText: {
+    fontSize: 12,
+    fontFamily: "monsterrat_font",
+    color: "#2c7a6e",
+    fontWeight: "600",
+  },
+
+  // ---------- Bottom nav ----------
   row: {
     position: "absolute",
     bottom: 25,
-    width: "90%",
+    width: "95%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -592,9 +680,7 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
-  // ============================================================
-  // Dropdown modal
-  // ============================================================
+  // ---------- Dropdown modal ----------
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -612,6 +698,7 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 10,
   },
+
   modalTitle: {
     fontSize: 15,
     fontFamily: "monsterrat_kp",
@@ -621,6 +708,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: "#eaf3f1",
   },
+
   modalItem: {
     flexDirection: "row",
     alignItems: "center",

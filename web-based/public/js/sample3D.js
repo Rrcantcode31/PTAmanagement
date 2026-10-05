@@ -23,6 +23,18 @@ document.addEventListener('DOMContentLoaded', function () {
   // Every new zone is a queue area
   const DEFAULT_ZONE_TYPE = 'queue';
 
+  // Radius (in km) around CENTER where drivers are allowed to appear
+  const DRIVER_VISIBILITY_RADIUS_KM = 0.5;
+
+  // How far the admin can pan away from CENTER (in km) — safety net
+  const MAX_PAN_RADIUS_KM = 2;
+
+  // How long to wait after the user stops dragging before snapping back
+  const SNAP_BACK_DELAY_MS = 1200;
+
+  // Default zoom level
+  const DEFAULT_ZOOM = 18;
+
   // ==================================================
   // STATE
   // ==================================================
@@ -32,6 +44,9 @@ document.addEventListener('DOMContentLoaded', function () {
   let activeTool       = null;
 
   let terminalsCache   = null;
+
+  // Snap-back timer handle
+  let snapBackTimer = null;
 
   // ==================================================
   // MODAL SYSTEM — INJECTED AT STARTUP
@@ -129,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // FROM, not a destination that needs its own dispatch zone
       const assignableTerminals = allTerminals.filter(function (t) {
         return Number(t.terminal_id) !== HUB_TERMINAL_ID;
-    });
+      });
 
       // Header
       modalTitle.textContent = 'Create Queue Zone';
@@ -374,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ==================================================
-  // MAP INITIALIZATION
+  // MAP INITIALIZATION — SNAP-BACK TO CENTER
   // ==================================================
 
   const mapEl = document.getElementById('map');
@@ -383,26 +398,129 @@ document.addEventListener('DOMContentLoaded', function () {
     return;
   }
 
-  const map = L.map('map', { zoomControl: false }).setView(CENTER, 18);
+  // Convert a km radius around a lat/lng into a bounding box
+  function boundsAround(lat, lng, radiusKm) {
+    const latDelta = radiusKm / 111;                                     // ~111 km per degree latitude
+    const lngDelta = radiusKm / (111 * Math.cos(lat * Math.PI / 180));   // adjust for longitude convergence
+    return L.latLngBounds(
+      [lat - latDelta, lng - lngDelta],   // south-west corner
+      [lat + latDelta, lng + lngDelta]    // north-east corner
+    );
+  }
+
+  const PAN_BOUNDS = boundsAround(CENTER[0], CENTER[1], MAX_PAN_RADIUS_KM);
+
+  const map = L.map('map', {
+    zoomControl: false,
+
+    // Dragging is allowed, but the map will glide back to CENTER after
+    // the user stops interacting
+    dragging: true,
+    keyboard: true,
+
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    touchZoom: true,
+
+    // Safety net: even mid-drag, the map can't run away further than
+    // MAX_PAN_RADIUS_KM from CENTER
+    maxBounds: PAN_BOUNDS,
+    maxBoundsViscosity: 0.85,   // slight give — feels natural, snaps back on
+    minZoom: 17,
+    maxZoom: 18.5
+  }).setView(CENTER, DEFAULT_ZOOM);
+
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+  // ==================================================
+  // SNAP-BACK LOGIC
+  // ==================================================
+
+  function cancelSnapBack() {
+    if (snapBackTimer) {
+      clearTimeout(snapBackTimer);
+      snapBackTimer = null;
+    }
+  }
+
+  function scheduleSnapBack() {
+    cancelSnapBack();
+
+    snapBackTimer = setTimeout(function () {
+      snapBackTimer = null;
+
+      const c = map.getCenter();
+
+      // Already centered? Do nothing.
+      const dLat = Math.abs(c.lat - CENTER[0]);
+      const dLng = Math.abs(c.lng - CENTER[1]);
+      if (dLat < 0.00005 && dLng < 0.00005) return;
+
+      // Preserve the current zoom level — user gets to choose how close they look
+      map.flyTo(
+        [CENTER[0], CENTER[1]],
+        map.getZoom(),
+        {
+          animate: true,
+          duration: 0.8,
+          easeLinearity: 0.25
+        }
+      );
+    }, SNAP_BACK_DELAY_MS);
+  }
+
+  // Cancel any pending snap-back while the user is actively dragging
+  map.on('dragstart', cancelSnapBack);
+
+  // Snap back after the user releases the drag
+  map.on('dragend', scheduleSnapBack);
+
+  // ==================================================
+  // RECENTER BUTTON — instant snap-back
+  // ==================================================
+
+  const RecenterControl = L.Control.extend({
+    options: { position: 'bottomleft' },
+
+    onAdd: function () {
+      const btn = L.DomUtil.create('button', 'leaflet-bar recenter-btn');
+      btn.type = 'button';
+      btn.title = 'Recenter map';
+      btn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+      btn.style.cssText =
+        'width:30px;height:30px;background:#fff;border:none;' +
+        'border-radius:4px;cursor:pointer;font-size:14px;color:#2c7a6e;';
+
+      L.DomEvent.disableClickPropagation(btn);
+      L.DomEvent.on(btn, 'click', function (e) {
+        L.DomEvent.stop(e);
+        cancelSnapBack();
+        map.flyTo(
+          [CENTER[0], CENTER[1]],
+          map.getZoom(),
+          { animate: true, duration: 0.6 }
+        );
+      });
+
+      return btn;
+    }
+  });
+
+  map.addControl(new RecenterControl());
 
   // ==================================================
   // BASE LAYERS
   // ==================================================
 
-  const southCotabatoBounds = L.latLngBounds([[5.95, 124.55], [6.65, 125.2]]);
-
   const defaultLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxBounds: southCotabatoBounds,
-    minZoom: 18,
-    maxZoom: 19.8,
+    minZoom: 17,
+    maxZoom: 20,
     attribution: '&copy; OpenStreetMap contributors'
   });
 
   const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxBounds: southCotabatoBounds,
-    minZoom: 18,
-    maxZoom: 19.7,
+    minZoom: 17,
+    maxZoom: 20,
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
   });
 
@@ -415,6 +533,20 @@ document.addEventListener('DOMContentLoaded', function () {
   ).addTo(map);
 
   const zoneLayerGroup = L.featureGroup().addTo(map);
+
+  // ==================================================
+  // VISIBILITY RADIUS (visual aid)
+  // ==================================================
+
+  L.circle(CENTER, {
+    radius: DRIVER_VISIBILITY_RADIUS_KM * 1000, // convert km to meters
+    color: '#2c7a6e',
+    weight: 1,
+    dashArray: '6 4',
+    fillColor: '#2c7a6e',
+    fillOpacity: 0.05,
+    interactive: false
+  }).addTo(map);
 
   // ==================================================
   // GEOMAN — disable default toolbar
@@ -996,6 +1128,19 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // Haversine distance in km between two lat/lng points
+  function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
   function initDriverTracking() {
 
     if (typeof io === 'undefined') {
@@ -1025,21 +1170,41 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
+      // ---- Distance filter: only show drivers within the radius ----
+      const distanceKm = haversineKm(
+        CENTER[0], CENTER[1],
+        latitude, longitude
+      );
+
+      const withinRadius = distanceKm <= DRIVER_VISIBILITY_RADIUS_KM;
+
+      // If outside the radius and we already have a marker, remove it
+      if (!withinRadius) {
+        if (driverMarkers[driverId]) {
+          map.removeLayer(driverMarkers[driverId]);
+          delete driverMarkers[driverId];
+        }
+        return;
+      }
+
       const status = data.status;
       const zone = data.zone;
 
       const icon = driverDotIcon(status);
-      const popupText = `Driver #${driverId} — ${status}${zone ? ' (' + zone + ')' : ''}`;
+      const popupText = `Driver #${driverId} — ${status}` +
+        `${zone ? ' (' + zone + ')' : ''}<br>` +
+        `Distance: ${distanceKm.toFixed(2)} km`;
 
       if (driverMarkers[driverId]) {
+        // Update existing marker in place
         driverMarkers[driverId].setLatLng([latitude, longitude]);
         driverMarkers[driverId].setIcon(icon);
         driverMarkers[driverId].setPopupContent(popupText);
       } else {
+        // Create new marker — do NOT move the map view
         driverMarkers[driverId] = L.marker([latitude, longitude], { icon })
           .addTo(map)
           .bindPopup(popupText);
-        map.setView([latitude, longitude], 18);
       }
     });
 

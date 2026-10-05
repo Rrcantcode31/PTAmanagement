@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  const cityIcon = dotIcon('#e63946');
+  const cityIcon = dotIcon('#3942e6');
 
   const terminalIcon = L.icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
