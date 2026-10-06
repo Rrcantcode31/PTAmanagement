@@ -1,181 +1,735 @@
-import { View, Text, TextInput, Alert, StyleSheet, ScrollView, ImageBackground} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useState } from "react";
-import axios from "axios";
+import {
+  Text,
+  View,
+  TextInput,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router } from "expo-router";
-import { TouchableOpacity } from "react-native";
-import { Picker } from "@react-native-picker/picker";
-import {API_URL} from "./_layout";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import axios from "axios";
+import { API_URL } from "./_layout";
 
+type ModalState = {
+  visible: boolean;
+  type: "error" | "success" | "info";
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+};
+
+const FARE_OPTIONS = [
+  { label: "Regular", value: "regular", icon: "person-outline" },
+  { label: "Student", value: "student", icon: "school-outline" },
+  { label: "PWD",     value: "pwd",     icon: "accessibility-outline" },
+  { label: "Senior",  value: "senior",  icon: "person-circle-outline" },
+] as const;
 
 export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
-
-  // Fare category is a self-declared discount label only — it does NOT
-  // grant a discount by itself. Drivers still verify eligibility with a
-  // valid physical ID before honoring it. See disclaimer text below.
   const [fareCategory, setFareCategory] = useState("regular");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [modal, setModal] = useState<ModalState>({
+    visible: false,
+    type: "error",
+    title: "",
+    message: "",
+  });
+
+  // ---- Live password match check ----
+  const passwordsMatch =
+    confirmPassword.length > 0 && password === confirmPassword;
+  const passwordsMismatch =
+    confirmPassword.length > 0 && password !== confirmPassword;
+
+  const showModal = (
+    type: ModalState["type"],
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setModal({ visible: true, type, title, message, onConfirm });
+  };
+
+  const closeModal = () => setModal((m) => ({ ...m, visible: false }));
+
+  const handleModalConfirm = () => {
+    closeModal();
+    if (modal.onConfirm) modal.onConfirm();
+  };
 
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
     monsterrat_font: require("../assets/Font/monsterrat_font.ttf"),
     monster_act: require("../assets/Font/monster_act.ttf"),
+    digitalFont: require("../assets/Font/digitalFont.ttf"),
   });
 
+  if (!fontsLoaded) return null;
+
   const handleRegister = async () => {
+    // Required field check
+    if (
+      !email.trim() ||
+      !password.trim() ||
+      !firstName.trim() ||
+      !lastName.trim()
+    ) {
+      showModal(
+        "error",
+        "Missing details",
+        "Please fill in your email, password, first name, and last name."
+      );
+      return;
+    }
+
+    // Password match check
+    if (password !== confirmPassword) {
+      showModal(
+        "error",
+        "Passwords don't match",
+        "Please make sure both password fields are identical."
+      );
+      return;
+    }
+
+    // Minimum length check
+    if (password.length < 6) {
+      showModal(
+        "error",
+        "Password too short",
+        "Your password must be at least 6 characters long."
+      );
+      return;
+    }
 
     try {
-      // Note: role_id is intentionally NOT sent from the client.
-      // This screen only ever creates commuter accounts — the backend
-      // should assign the commuter role itself, not trust a client-
-      // supplied role_id. (Admin/driver accounts are created by admins
-      // through a separate, protected flow.)
       const res = await axios.post(`${API_URL}/api/auth/signup`, {
-        email,
+        email: email.trim(),
         password,
-        firstName,
-        middleName,
-        lastName,
-        contactNumber,
+        firstName: firstName.trim(),
+        middleName: middleName.trim(),
+        lastName: lastName.trim(),
+        contactNumber: contactNumber.trim(),
         fareCategory,
       });
 
       if (res.data.success) {
-        Alert.alert("Success", res.data.message);
-        router.replace("/");
+        showModal(
+          "success",
+          "Welcome aboard!",
+          res.data.message || "Your account has been created successfully.",
+          () => router.replace("/")
+        );
       } else {
-        Alert.alert("Error", res.data.message);
+        showModal(
+          "error",
+          "Sign-up failed",
+          res.data.message || "Please try again."
+        );
       }
     } catch (error: any) {
       console.log("Signup error:", error.response?.data || error.message);
-      Alert.alert("Error", error.response?.data?.message || "Signup failed");
+
+      const data = error.response?.data;
+      let message = "Something went wrong. Please try again.";
+
+      if (typeof data === "string") {
+        message = data;
+      } else if (typeof data?.message === "string") {
+        message = data.message;
+      } else if (typeof data?.error === "string") {
+        message = data.error;
+      } else if (Array.isArray(data?.errors) && data.errors.length) {
+        message = data.errors.join("\n");
+      } else if (data?.errors && typeof data.errors === "object") {
+        message = Object.values(data.errors).flat().join("\n");
+      } else if (error.request) {
+        message = "Cannot reach the server. Please check your connection.";
+      } else {
+        message = error.message || message;
+      }
+
+      showModal("error", "Sign-up failed", message);
     }
   };
 
+  const theme = getModalTheme(modal.type);
+
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-    <ImageBackground
-          source={require('../assets/images/main-bg.png')}
-          style={{ flex: 1 }}
-          resizeMode="cover"
+    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <ImageBackground
+        source={require("../assets/images/main-bg.png")}
+        style={{ flex: 1 }}
+        resizeMode="cover"
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
         >
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Sign-up</Text>
+          <BlurView intensity={35} tint="light" style={styles.signupCard}>
+            <Text style={styles.cardTitle}>Sign-up</Text>
 
-      <TextInput placeholder="Email" style={styles.input} onChangeText={setEmail} />
-      <TextInput placeholder="Password" secureTextEntry style={styles.input} onChangeText={setPassword} />
+            {/* ===== EMAIL ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Email"
+                placeholderTextColor="#7f9f97"
+                style={styles.input}
+                onChangeText={setEmail}
+                value={email}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+              />
+            </View>
 
-      <TextInput placeholder="First Name" style={styles.input} onChangeText={setFirstName} />
-      <TextInput placeholder="Middle Name" style={styles.input} onChangeText={setMiddleName} />
-      <TextInput placeholder="Last Name" style={styles.input} onChangeText={setLastName} />
+            {/* ===== PASSWORD ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="key-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Password"
+                placeholderTextColor="#7f9f97"
+                secureTextEntry={!showPassword}
+                style={styles.input}
+                onChangeText={setPassword}
+                value={password}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color="#7f9f97"
+                />
+              </TouchableOpacity>
+            </View>
 
-      <TextInput placeholder="Contact Number" style={styles.input} onChangeText={setContactNumber} />
+            {/* ===== CONFIRM PASSWORD ===== */}
+            <View
+              style={[
+                styles.inputWrapper,
+                passwordsMismatch && styles.inputWrapperError,
+                passwordsMatch && styles.inputWrapperSuccess,
+              ]}
+            >
+              <Ionicons
+                name="key-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Confirm Password"
+                placeholderTextColor="#7f9f97"
+                secureTextEntry={!showConfirmPassword}
+                style={styles.input}
+                onChangeText={setConfirmPassword}
+                value={confirmPassword}
+                autoCapitalize="none"
+              />
+              {passwordsMatch && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={18}
+                  color="#2ECC8F"
+                  style={{ marginRight: 8 }}
+                />
+              )}
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword((v) => !v)}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color="#7f9f97"
+                />
+              </TouchableOpacity>
+            </View>
 
-      <Text style={styles.fieldLabel}>Fare Category</Text>
+            {/* Live mismatch hint */}
+            {passwordsMismatch && (
+              <Text style={styles.matchHintError}>
+                Passwords don't match yet
+              </Text>
+            )}
 
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={fareCategory}
-          onValueChange={(itemValue) => setFareCategory(itemValue)}
+            {/* ===== FIRST NAME ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="First Name"
+                placeholderTextColor="#7f9f97"
+                style={styles.input}
+                onChangeText={setFirstName}
+                value={firstName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            {/* ===== MIDDLE NAME ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Middle Name (optional)"
+                placeholderTextColor="#7f9f97"
+                style={styles.input}
+                onChangeText={setMiddleName}
+                value={middleName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            {/* ===== LAST NAME ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Last Name"
+                placeholderTextColor="#7f9f97"
+                style={styles.input}
+                onChangeText={setLastName}
+                value={lastName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            {/* ===== CONTACT NUMBER ===== */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="call-outline"
+                size={18}
+                color="#7f9f97"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Contact Number"
+                placeholderTextColor="#7f9f97"
+                style={styles.input}
+                onChangeText={setContactNumber}
+                value={contactNumber}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            {/* ===== FARE CATEGORY ===== */}
+            <Text style={styles.fieldLabel}>FARE CATEGORY</Text>
+
+            <View style={styles.pillRow}>
+              {FARE_OPTIONS.map((opt) => {
+                const active = fareCategory === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => setFareCategory(opt.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={opt.icon as any}
+                      size={13}
+                      color={active ? "#fff" : "#319086"}
+                    />
+                    <Text
+                      style={[
+                        styles.pillText,
+                        active && styles.pillTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.disclaimer}>
+              Fare category is self-declared. You'll need to present a valid ID
+              to the driver to claim discounts.
+            </Text>
+
+            {/* ===== SIGN-UP BUTTON ===== */}
+            <TouchableOpacity
+              style={styles.signupBtn}
+              onPress={handleRegister}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.signupBtnText}>SIGN-UP</Text>
+            </TouchableOpacity>
+
+            {/* ===== LOGIN LINK ===== */}
+            <TouchableOpacity onPress={() => router.push("/")}>
+              <Text style={styles.loginLink}>
+                Already have an account?{" "}
+                <Text style={styles.loginLinkBold}>Login</Text>
+              </Text>
+            </TouchableOpacity>
+          </BlurView>
+        </ScrollView>
+
+        {/* ===== CUSTOM MODAL ===== */}
+        <Modal
+          visible={modal.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeModal}
         >
-          <Picker.Item label="Regular" value="regular" />
-          <Picker.Item label="Student" value="student" />
-          <Picker.Item label="PWD" value="pwd" />
-          <Picker.Item label="Senior Citizen" value="senior" />
-        </Picker>
-      </View>
+          <Pressable style={styles.modalBackdrop} onPress={closeModal}>
+            <Pressable
+              style={styles.modalCard}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View
+                style={[
+                  styles.modalIconWrap,
+                  {
+                    backgroundColor: theme.iconBg,
+                    borderColor: theme.iconBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={theme.icon}
+                  size={28}
+                  color={theme.iconColor}
+                />
+              </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Sign-up</Text>
-      </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: theme.titleColor }]}>
+                {modal.title}
+              </Text>
 
-      <Text style={styles.link} onPress={() => router.push("/")}>
-        Already have an account? Login
-      </Text>
-    </ScrollView>
-    </ImageBackground>
+              <Text style={styles.modalMessage}>{modal.message}</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: theme.buttonBg },
+                ]}
+                onPress={handleModalConfirm}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalButtonText}>
+                  {modal.type === "success" ? "Go to Login" : "Got it"}
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </ImageBackground>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-      flex: 1
-    },
+// ---------- modal theme helper ----------
+function getModalTheme(type: ModalState["type"]) {
+  switch (type) {
+    case "success":
+      return {
+        icon: "checkmark-circle" as const,
+        iconColor: "#2ECC8F",
+        iconBg: "rgba(46, 204, 143, 0.12)",
+        iconBorder: "rgba(46, 204, 143, 0.28)",
+        titleColor: "#1f6f66",
+        buttonBg: "#2ECC8F",
+      };
+    case "info":
+      return {
+        icon: "information-circle" as const,
+        iconColor: "#4384ac",
+        iconBg: "rgba(67, 132, 172, 0.12)",
+        iconBorder: "rgba(67, 132, 172, 0.28)",
+        titleColor: "#2b5f80",
+        buttonBg: "#4384ac",
+      };
+    case "error":
+    default:
+      return {
+        icon: "alert-circle" as const,
+        iconColor: "#e74c3c",
+        iconBg: "rgba(231, 76, 60, 0.12)",
+        iconBorder: "rgba(231, 76, 60, 0.28)",
+        titleColor: "#b03427",
+        buttonBg: "#e74c3c",
+      };
+  }
+}
 
-    container: {
-    flex: 1,
-    justifyContent: "flex-start",
-    padding: 25,
-    paddingTop: 110,
-   
+const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
+
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 30,
   },
 
-    title: {
-    marginTop:10,
-    fontSize: 43,
+  // ============================================================
+  // GLASS SIGNUP CARD
+  // ============================================================
+  signupCard: {
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.45)",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+  },
+
+  cardTitle: {
+    fontSize: 28,
     fontFamily: "monsterrat_kp",
-    marginBottom: 35,
+    color: "#1f6f66",
     textAlign: "center",
-    
+    marginBottom: 24,
+    letterSpacing: 1,
+  },
+
+  // ---------- inputs ----------
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.20)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+
+  inputWrapperError: {
+    borderColor: "rgba(231, 76, 60, 0.55)",
+    backgroundColor: "rgba(231, 76, 60, 0.06)",
+  },
+
+  inputWrapperSuccess: {
+    borderColor: "rgba(46, 204, 143, 0.55)",
+    backgroundColor: "rgba(46, 204, 143, 0.06)",
+  },
+
+  inputIcon: {
+    marginRight: 12,
   },
 
   input: {
-    borderWidth: 0.5,
-    marginBottom: 20,
-    padding: 10,
-    borderRadius: 15,
-    borderColor: "#1513133e" ,
+    flex: 1,
+    paddingVertical: 14,
     fontFamily: "monster_act",
-    backgroundColor: "#ffffff4c",
+    fontSize: 14,
+    color: "#1f3d38",
   },
 
+  matchHintError: {
+    fontSize: 11,
+    fontFamily: "monster_act",
+    color: "#e74c3c",
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 4,
+    fontStyle: "italic",
+  },
+
+  // ---------- fare category ----------
   fieldLabel: {
-    fontFamily: "monster_act",
-    fontSize: 13,
-    marginBottom: 6,
-    color: "#333",
+    fontSize: 10,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#7f9f97",
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    marginTop: 2,
   },
 
-  pickerContainer: {
-    borderWidth: 0.5,
-    borderRadius: 15,
+  pillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: 10,
-    justifyContent: "center",
-    height: 38,
-    width: 220,
+  },
+
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(49, 144, 134, 0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+  },
+
+  pillActive: {
+    backgroundColor: "#319086",
+    borderColor: "#319086",
+  },
+
+  pillText: {
+    fontSize: 12,
     fontFamily: "monsterrat_font",
-    overflow: "hidden",
-    backgroundColor: "#ffffff4c",
- },
-
-  button: {
-    backgroundColor: "#4384ac", 
-    paddingVertical: 10,        
-    borderRadius: 13,           
-    marginBottom: 10,           
-    alignItems: "center",       
+    fontWeight: "700",
+    color: "#319086",
+    letterSpacing: 0.3,
   },
 
-  buttonText: {
-    color: "white",             
-    fontSize: 14,               
-    fontFamily: "monster_act",  
+  pillTextActive: {
+    color: "#fff",
   },
 
-  link: {
-    marginTop: 15,
-    color: "blue",
-    fontSize: 15,
+  disclaimer: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginBottom: 20,
+    fontStyle: "italic",
+  },
+
+  // ---------- sign-up button ----------
+  signupBtn: {
+    backgroundColor: "rgba(255, 255, 255, 0.65)",
+    paddingVertical: 15,
+    borderRadius: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.8)",
+    marginBottom: 20,
+  },
+
+  signupBtnText: {
+    color: "#1f6f66",
+    fontSize: 16,
+    fontFamily: "monsterrat_kp",
+    letterSpacing: 3,
+  },
+
+  // ---------- login link ----------
+  loginLink: {
     textAlign: "center",
-    fontFamily: "monsterrat_font",
-    fontWeight: 600
+    color: "#4a5f5a",
+    fontSize: 13,
+    fontStyle: "italic",
+    fontFamily: "monster_act",
   },
 
+  loginLinkBold: {
+    color: "#2b5f80",
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    fontStyle: "normal",
+  },
+
+  // ============================================================
+  // MODAL
+  // ============================================================
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 30, 28, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+
+  modalCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.8)",
+  },
+
+  modalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    marginBottom: 16,
+  },
+
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: "monsterrat_kp",
+    textAlign: "center",
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+
+  modalMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: "monster_act",
+    color: "#4a5f5a",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+
+  modalButton: {
+    width: "100%",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  modalButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
 });

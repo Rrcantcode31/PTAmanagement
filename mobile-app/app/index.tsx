@@ -3,7 +3,6 @@ import {
   Text,
   View,
   TextInput,
-  StatusBar,
   StyleSheet,
   Modal,
   TouchableOpacity,
@@ -190,27 +189,30 @@ export default function Login() {
               />
             </View>
 
-            {/* ===== FORGOT PASSWORD ===== */}
-            <TouchableOpacity
-              style={styles.forgotWrap}
-              onPress={() => showModal("info", "Reset password", "Password reset flow coming soon.")}
-            >
-              <Text style={styles.forgotLink}>Forgot your password?</Text>
-            </TouchableOpacity>
+            {/* ===== REMEMBER ME + FORGOT PASSWORD (same row) ===== */}
+            <View style={styles.metaRow}>
+              <TouchableOpacity
+                style={styles.rememberRow}
+                activeOpacity={0.7}
+                onPress={() => setRememberMe((v) => !v)}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && (
+                    <Ionicons name="checkmark" size={12} color="#fff" />
+                  )}
+                </View>
+                <Text style={styles.rememberText}>Remember me</Text>
+              </TouchableOpacity>
 
-            {/* ===== REMEMBER ME ===== */}
-            <TouchableOpacity
-              style={styles.rememberRow}
-              activeOpacity={0.7}
-              onPress={() => setRememberMe((v) => !v)}
-            >
-              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                {rememberMe && (
-                  <Ionicons name="checkmark" size={12} color="#fff" />
-                )}
-              </View>
-              <Text style={styles.rememberText}>Remember me</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.forgotWrap}
+                onPress={() =>
+                  showModal("info", "Reset password", "Password reset flow coming soon.")
+                }
+              >
+                <Text style={styles.forgotLink}>Forgot your password?</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* ===== LOGIN BUTTON ===== */}
             <TouchableOpacity
@@ -373,48 +375,54 @@ const styles = StyleSheet.create({
     color: "#1f3d38",
   },
 
-  // ---------- forgot password ----------
-  forgotWrap: {
-    alignSelf: "flex-end",
-    marginBottom: 16,
-  },
+  /// ---------- remember me + forgot password (single row) ----------
+metaRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 24,
+  gap: 12,
+},
 
-  forgotLink: {
-    color: "#4384ac",
-    fontSize: 12,
-    fontFamily: "monsterrat_font",
-    fontWeight: "600",
-  },
+rememberRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  flexShrink: 1,
+},
 
-  // ---------- remember me ----------
-  rememberRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
+checkbox: {
+  width: 18,
+  height: 18,
+  borderRadius: 5,
+  borderWidth: 1.5,
+  borderColor: "#7f9f97",
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 8,
+  backgroundColor: "rgba(255,255,255,0.3)",
+},
 
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: "#7f9f97",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
+checkboxChecked: {
+  backgroundColor: "#319086",
+  borderColor: "#319086",
+},
 
-  checkboxChecked: {
-    backgroundColor: "#319086",
-    borderColor: "#319086",
-  },
+rememberText: {
+  fontSize: 13,
+  fontFamily: "monster_act",
+  color: "#4a5f5a",
+},
 
-  rememberText: {
-    fontSize: 13,
-    fontFamily: "monster_act",
-    color: "#4a5f5a",
-  },
+forgotWrap: {
+  // no alignSelf: "flex-end" anymore — the parent row handles positioning
+},
+
+forgotLink: {
+  color: "#4384ac",
+  fontSize: 12,
+  fontFamily: "monsterrat_font",
+  fontWeight: "600",
+},
 
   // ---------- login button ----------
   loginBtn: {
@@ -439,6 +447,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#4a5f5a",
     fontSize: 13,
+    fontStyle: "italic",
     fontFamily: "monster_act",
   },
 
