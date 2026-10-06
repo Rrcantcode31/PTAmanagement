@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
-import { router } from "expo-router";
+import { router, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import axios from "axios";
@@ -24,14 +24,14 @@ type ModalState = {
   type: "error" | "success" | "info";
   title: string;
   message: string;
-  onConfirm?: () => void; // Added to handle success navigation
+  onConfirm?: () => void;
 };
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
 
   const [modal, setModal] = useState<ModalState>({
     visible: false,
@@ -49,14 +49,11 @@ export default function Login() {
     setModal({ visible: true, type, title, message, onConfirm });
   };
 
-  const closeModal = () =>
-    setModal((m) => ({ ...m, visible: false }));
+  const closeModal = () => setModal((m) => ({ ...m, visible: false }));
 
   const handleModalConfirm = () => {
     closeModal();
-    if (modal.onConfirm) {
-      modal.onConfirm();
-    }
+    if (modal.onConfirm) modal.onConfirm();
   };
 
   const [fontsLoaded] = useFonts({
@@ -66,7 +63,17 @@ export default function Login() {
     digitalFont: require("../assets/Font/digitalFont.ttf"),
   });
 
-  if (!fontsLoaded) return null;
+  // ---- Wait for fonts + stored session before deciding what to show ----
+  if (!fontsLoaded || isLoading) return null;
+
+  // ---- Already logged in? Skip the form ----
+  if (user) {
+    return (
+      <Redirect
+        href={user.type === "driver" ? "/driverApp/driverDashboard" : "/Dashboard"}
+      />
+    );
+  }
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -85,16 +92,16 @@ export default function Login() {
       });
 
       if (res.data.success) {
-        const user = res.data.user;
-        await login(user, res.data.token);
+        const userData = res.data.user;
 
-        // Show success modal and pass the navigation logic as onConfirm
+        await login(userData, res.data.token, rememberMe);
+
         showModal(
           "success",
           "Welcome back!",
           res.data.message || "Login successful.",
           () => {
-            if (user.type === "driver") {
+            if (userData.type === "driver") {
               router.replace("/driverApp/driverDashboard");
             } else {
               router.replace("/Dashboard");
@@ -147,7 +154,6 @@ export default function Login() {
       >
         <View style={styles.container}>
           <BlurView intensity={35} tint="light" style={styles.loginCard}>
-            
             <Text style={styles.cardTitle}>Login</Text>
 
             {/* ===== USERNAME INPUT ===== */}
@@ -189,14 +195,16 @@ export default function Login() {
               />
             </View>
 
-            {/* ===== REMEMBER ME + FORGOT PASSWORD (same row) ===== */}
+            {/* ===== REMEMBER ME + FORGOT PASSWORD ===== */}
             <View style={styles.metaRow}>
               <TouchableOpacity
                 style={styles.rememberRow}
                 activeOpacity={0.7}
                 onPress={() => setRememberMe((v) => !v)}
               >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                <View
+                  style={[styles.checkbox, rememberMe && styles.checkboxChecked]}
+                >
                   {rememberMe && (
                     <Ionicons name="checkmark" size={12} color="#fff" />
                   )}
@@ -207,7 +215,11 @@ export default function Login() {
               <TouchableOpacity
                 style={styles.forgotWrap}
                 onPress={() =>
-                  showModal("info", "Reset password", "Password reset flow coming soon.")
+                  showModal(
+                    "info",
+                    "Reset password",
+                    "Password reset flow coming soon."
+                  )
                 }
               >
                 <Text style={styles.forgotLink}>Forgot your password?</Text>
@@ -226,10 +238,10 @@ export default function Login() {
             {/* ===== SIGN UP LINK ===== */}
             <TouchableOpacity onPress={() => router.push("/Signup")}>
               <Text style={styles.signupLink}>
-                Don't have an account? <Text style={styles.signupLinkBold}>Sign-up</Text>
+                Don't have an account?{" "}
+                <Text style={styles.signupLinkBold}>Sign-up</Text>
               </Text>
             </TouchableOpacity>
-
           </BlurView>
         </View>
 
@@ -256,7 +268,7 @@ export default function Login() {
               >
                 <Ionicons
                   name={theme.icon}
-                  size={28} // Slightly larger icon for success
+                  size={28}
                   color={theme.iconColor}
                 />
               </View>
@@ -290,7 +302,7 @@ function getModalTheme(type: ModalState["type"]) {
     case "success":
       return {
         icon: "checkmark-circle" as const,
-        iconColor: "#2ECC8F", // Vibrant success green
+        iconColor: "#2ECC8F",
         iconBg: "rgba(46, 204, 143, 0.12)",
         iconBorder: "rgba(46, 204, 143, 0.28)",
         titleColor: "#1f6f66",
@@ -328,9 +340,6 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
 
-  // ============================================================
-  // GLASS LOGIN CARD
-  // ============================================================
   loginCard: {
     borderRadius: 28,
     paddingHorizontal: 24,
@@ -351,7 +360,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // ---------- inputs ----------
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -363,9 +371,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  inputIcon: {
-    marginRight: 12,
-  },
+  inputIcon: { marginRight: 12 },
 
   input: {
     flex: 1,
@@ -375,56 +381,53 @@ const styles = StyleSheet.create({
     color: "#1f3d38",
   },
 
-  /// ---------- remember me + forgot password (single row) ----------
-metaRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: 24,
-  gap: 12,
-},
+  // ---------- remember me + forgot password ----------
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 24,
+    gap: 12,
+  },
 
-rememberRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  flexShrink: 1,
-},
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
 
-checkbox: {
-  width: 18,
-  height: 18,
-  borderRadius: 5,
-  borderWidth: 1.5,
-  borderColor: "#7f9f97",
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 8,
-  backgroundColor: "rgba(255,255,255,0.3)",
-},
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#7f9f97",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
 
-checkboxChecked: {
-  backgroundColor: "#319086",
-  borderColor: "#319086",
-},
+  checkboxChecked: {
+    backgroundColor: "#319086",
+    borderColor: "#319086",
+  },
 
-rememberText: {
-  fontSize: 13,
-  fontFamily: "monster_act",
-  color: "#4a5f5a",
-},
+  rememberText: {
+    fontSize: 13,
+    fontFamily: "monster_act",
+    color: "#4a5f5a",
+  },
 
-forgotWrap: {
-  // no alignSelf: "flex-end" anymore — the parent row handles positioning
-},
+  forgotWrap: {},
 
-forgotLink: {
-  color: "#4384ac",
-  fontSize: 12,
-  fontFamily: "monsterrat_font",
-  fontWeight: "600",
-},
+  forgotLink: {
+    color: "#4384ac",
+    fontSize: 12,
+    fontFamily: "monsterrat_font",
+    fontWeight: "600",
+  },
 
-  // ---------- login button ----------
   loginBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.65)",
     paddingVertical: 15,
@@ -442,7 +445,6 @@ forgotLink: {
     letterSpacing: 3,
   },
 
-  // ---------- signup link ----------
   signupLink: {
     textAlign: "center",
     color: "#4a5f5a",
@@ -457,9 +459,6 @@ forgotLink: {
     fontWeight: "700",
   },
 
-  // ============================================================
-  // MODAL
-  // ============================================================
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 30, 28, 0.4)",
@@ -474,15 +473,15 @@ forgotLink: {
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderRadius: 24,
     paddingHorizontal: 24,
-    paddingTop: 32, // Increased top padding
-    paddingBottom: 28, // Increased bottom padding
+    paddingTop: 32,
+    paddingBottom: 28,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.8)",
   },
 
   modalIconWrap: {
-    width: 64, // Slightly larger badge
+    width: 64,
     height: 64,
     borderRadius: 32,
     alignItems: "center",
@@ -492,7 +491,7 @@ forgotLink: {
   },
 
   modalTitle: {
-    fontSize: 20, // Slightly larger title
+    fontSize: 20,
     fontFamily: "monsterrat_kp",
     textAlign: "center",
     marginBottom: 8,
