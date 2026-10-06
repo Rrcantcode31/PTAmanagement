@@ -65,8 +65,11 @@ const API_URL = "/driverQueue";
 const HUB_FALLBACK = { lat: 6.48409, lng: 124.85211, name: "Koronadal City" };
 
 // ---------- Panel heights ----------
-const COLLAPSED_H = 245;
-const EXPANDED_H  = H * 0.85;
+// Collapsed panel shrinks when the "Your position" card is hidden.
+const COLLAPSED_H_WITH_ME = 245;
+const COLLAPSED_H_SOLO    = 168;
+// Expanded list is now compact — no longer takes most of the screen.
+const EXPANDED_H          = Math.min(H * 0.55, 460);
 
 // ============================================================
 // Leaflet HTML builder
@@ -213,14 +216,27 @@ export default function DriverQueue() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
-  const panelHeight = useRef(new Animated.Value(COLLAPSED_H)).current;
   const mapTargetRef = useRef(null);
 
-  // ---- Fetch queue + route when we know the driver id ----
+  // ---- Derived queue state ----
+  const firstInQueue = queue.find((q) => q.queue_position === 1) || null;
+  const me           = queue.find((q) => q.driver_id === user?.id) || null;
+  const amFirst      = !!me && me.queue_position === 1;
+
+  // "Your position" shows ONLY when the driver is queued AND not 1st.
+  // Hidden when: not queued yet, or already 1st in line.
+  const showMeCard = !!me && !amFirst;
+  const collapsedH = showMeCard ? COLLAPSED_H_WITH_ME : COLLAPSED_H_SOLO;
+
+  const panelHeight = useRef(new Animated.Value(COLLAPSED_H_WITH_ME)).current;
+
+  // ---- Fetch queue + route, then refresh every 10s so position stays live ----
   useEffect(() => {
     if (!user?.id) return;   // wait for auth to hydrate
 
-    (async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         const res = await fetch(
           `${API_URL}?driver_id=${user.id}`,
@@ -232,6 +248,7 @@ export default function DriverQueue() {
         if (!json.success || !json.data) {
           throw new Error(json.message || "Failed to load queue");
         }
+        if (cancelled) return;
 
         setDriver(json.data.driver);
         setRoute(json.data.route);
@@ -239,13 +256,32 @@ export default function DriverQueue() {
       } catch (err) {
         console.error("driverQueue fetch failed:", err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
+    };
+
+    load();
+    const timer = setInterval(load, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [user?.id]);
 
+  // ---- Resize the collapsed panel when the "Your position" card appears/hides ----
+  useEffect(() => {
+    if (expanded) return;
+    Animated.spring(panelHeight, {
+      toValue: collapsedH,
+      useNativeDriver: false,
+      friction: 10,
+      tension: 60,
+    }).start();
+  }, [collapsedH, expanded]);
+
   const toggleExpanded = () => {
-    const to = expanded ? COLLAPSED_H : EXPANDED_H;
+    const to = expanded ? collapsedH : EXPANDED_H;
     setExpanded(!expanded);
     Animated.spring(panelHeight, {
       toValue: to,
@@ -264,9 +300,6 @@ export default function DriverQueue() {
 
   if (!fontsLoaded) return null;
 
-  const firstInQueue = queue.find((q) => q.queue_position === 1) || null;
-  const me           = queue.find((q) => q.driver_id === user?.id) || null;
-
   // Route subtitle — falls back to the driver's own terminal
   const routeLabel = route
     ? `Route: ${route.from.name} ↔ ${route.to.name}`
@@ -276,10 +309,10 @@ export default function DriverQueue() {
 
   // Build the map — uses the terminal coords from auth as fallback
   const leafletHTML = buildLeafletHTML(
-  user?.terminal_lat ?? null,
-  user?.terminal_lng ?? null,
-  user?.terminal_name ?? null,
-);
+    user?.terminal_lat ?? null,
+    user?.terminal_lng ?? null,
+    user?.terminal_name ?? null,
+  );
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
@@ -318,9 +351,12 @@ export default function DriverQueue() {
 
             {!expanded ? (
               <Pressable onPress={toggleExpanded} style={{ flex: 1 }}>
+                {/* 1st in queue — becomes "You're 1st" when it's the driver */}
                 <View style={styles.cardFirst}>
                   <View style={styles.cardFirstLeft}>
-                    <Text style={styles.cardLabelLight}>1ST IN QUEUE</Text>
+                    <Text style={styles.cardLabelLight}>
+                      {amFirst ? "YOU'RE 1ST IN QUEUE" : "1ST IN QUEUE"}
+                    </Text>
                     <Text style={styles.cardNameLight}>
                       {firstInQueue ? firstInQueue.driver_name : "Queue empty"}
                     </Text>
@@ -333,29 +369,24 @@ export default function DriverQueue() {
                   </View>
                 </View>
 
-                <View style={[styles.cardMe, !me && styles.cardMeInactive]}>
-                  <View style={styles.cardMeLeft}>
-                    <Text style={styles.cardLabelBlue}>YOUR POSITION</Text>
-                    <Text style={styles.cardNameDark}>
-                      {me ? me.driver_name : driver ? driver.driver_name : "Not in queue"}
-                    </Text>
-                    <Text style={styles.cardPlateDark}>
-                      {me ? me.plate_number : driver ? driver.plate_number : "—"}
-                    </Text>
+                {/* Your position — hidden when the driver is already 1st */}
+                {showMeCard && me && (
+                  <View style={styles.cardMe}>
+                    <View style={styles.cardMeLeft}>
+                      <Text style={styles.cardLabelBlue}>YOUR POSITION</Text>
+                      <Text style={styles.cardNameDark}>{me.driver_name}</Text>
+                      <Text style={styles.cardPlateDark}>{me.plate_number}</Text>
+                    </View>
+                    <View style={styles.mePositionBadge}>
+                      <Text style={styles.mePositionNum}>
+                        #{me.queue_position}
+                      </Text>
+                      <Text style={styles.mePositionStatus}>
+                        {me.queue_status === "WAITING" ? "Next to depart" : "Waiting"}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.mePositionBadge}>
-                    <Text style={styles.mePositionNum}>
-                      {me ? `#${me.queue_position}` : "—"}
-                    </Text>
-                    <Text style={styles.mePositionStatus}>
-                      {me
-                        ? me.queue_status === "WAITING"
-                          ? "Next to depart"
-                          : "Waiting"
-                        : "Join a zone"}
-                    </Text>
-                  </View>
-                </View>
+                )}
 
                 <View style={styles.handleWrap}>
                   <View style={styles.handle} />
@@ -378,41 +409,37 @@ export default function DriverQueue() {
                     return (
                       <View
                         key={item.queue_id}
-                        style={[styles.queueCard, isMe && styles.queueCardMe]}
+                        style={[styles.queueRow, isMe && styles.queueRowMe]}
                       >
-                        <View style={[styles.avatar, isMe && styles.avatarMe]}>
-                          <Ionicons
-                            name={isMe ? "person" : "person-outline"}
-                            size={22}
-                            color={isMe ? "#fff" : "#5c7e76"}
-                          />
+                        <View
+                          style={[
+                            styles.posBadge,
+                            idx === 0 && styles.posBadgeFirst,
+                            isMe && idx !== 0 && styles.posBadgeMe,
+                          ]}
+                        >
+                          <Text style={styles.posText}>#{item.queue_position}</Text>
                         </View>
+
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.plate}>{item.plate_number}</Text>
-                          <Text style={styles.name}>
-                            {item.driver_name}{" "}
-                            {isMe && <Text style={styles.youTag}>• You</Text>}
+                          <Text style={styles.plate} numberOfLines={1}>
+                            {item.plate_number}
+                            <Text style={styles.name}>  {item.driver_name}</Text>
+                            {isMe && <Text style={styles.youTag}>  • You</Text>}
                           </Text>
-                          <Text style={styles.vType}>{item.vehicle_type}</Text>
-                        </View>
-                        <View style={styles.rightCol}>
-                          <View
-                            style={[
-                              styles.posBadge,
-                              idx === 0 && styles.posBadgeFirst,
-                            ]}
-                          >
-                            <Text style={styles.posText}>#{item.queue_position}</Text>
-                          </View>
-                          <Text
-                            style={[
-                              styles.status,
-                              idx === 0 ? styles.statusReady : styles.statusOther,
-                            ]}
-                          >
-                            {idx === 0 ? "Next" : "Waiting"}
+                          <Text style={styles.vType} numberOfLines={1}>
+                            {item.vehicle_type}
                           </Text>
                         </View>
+
+                        <Text
+                          style={[
+                            styles.status,
+                            idx === 0 ? styles.statusReady : styles.statusOther,
+                          ]}
+                        >
+                          {idx === 0 ? "Next" : "Waiting"}
+                        </Text>
                       </View>
                     );
                   })}
@@ -430,19 +457,36 @@ export default function DriverQueue() {
 
         {/* BOTTOM NAV */}
         <View style={styles.row}>
-          <GridNavButton title="Dashboard"   route="./driverDashboard"  icon="view-dashboard-outline" />
-          <GridNavButton title="Map routes"  route="./driverRoute"      icon="map-marker-path" />
-          <GridNavButton title="Fare prices" route="./driverFareprices" icon="cash-multiple" />
-          <GridNavButton title="Vehicles"    route="./driverQueue"      icon="van-passenger" active={pathname === "/driverApp/driverQueue"} />
-          <GridNavButton title="Profile"     route="./driverProfile"    icon="account-circle" />
+          <GridNavButton
+            title="Dashboard"
+            route="./driverDashboard"
+            icon="view-dashboard-outline"
+            active={pathname === "/driverApp/driverDashboard"}
+          />
+          <GridNavButton
+            title="Vehicles"
+            route="./driverQueue"
+            icon="van-passenger"
+            active={pathname === "/driverApp/driverQueue"}
+          />
+          <GridNavButton
+            title="Fares"
+            route="./driverFareprices"
+            icon="cash-multiple"
+            active={pathname === "/driverApp/driverFareprices"}
+          />
+          <GridNavButton
+            title="Profile"
+            route="./driverProfile"
+            icon="account-circle"
+            active={pathname === "/driverApp/driverProfile"}
+          />
         </View>
-
       </View>
     </SafeAreaView>
   );
 }
 
-// ---------- styles unchanged ----------
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   root: { flex: 1, backgroundColor: "#e9efe9" },
@@ -468,7 +512,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
 
-  pageHeader: { marginBottom: 14, paddingHorizontal: 4 },
+  pageHeader: { marginBottom: 12, paddingHorizontal: 4 },
   pageTitle: {
     fontSize: 22, fontFamily: "monsterrat_kp",
     color: "#1a1a1a", marginBottom: 2,
@@ -537,45 +581,42 @@ const styles = StyleSheet.create({
     color: "#2c7a6e", marginTop: 1,
   },
 
-  handleWrap: { alignItems: "center", paddingVertical: 10 },
+  handleWrap: { alignItems: "center", paddingVertical: 8 },
   handle: {
     width: 42, height: 4, borderRadius: 2, backgroundColor: "#c8d4d0",
   },
 
-  listContent: { paddingTop: 6, paddingBottom: 10 },
+  // ---------- compact list ----------
+  listContent: { paddingTop: 2, paddingBottom: 6 },
   listHeader: {
     flexDirection: "row", justifyContent: "space-between",
-    alignItems: "flex-end", marginBottom: 10, paddingHorizontal: 4,
+    alignItems: "flex-end", marginBottom: 6, paddingHorizontal: 4,
   },
-  listTitle: { fontSize: 14, fontFamily: "monsterrat_kp", color: "#1a1a1a" },
+  listTitle: { fontSize: 13, fontFamily: "monsterrat_kp", color: "#1a1a1a" },
   listCount: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
 
-  queueCard: {
-    flexDirection: "row", alignItems: "center",
+  queueRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "rgba(247, 251, 250, 0.94)",
-    borderRadius: 14, padding: 10,
-    marginBottom: 8, borderWidth: 1, borderColor: "#e2f0ec",
+    borderRadius: 12,
+    paddingVertical: 6, paddingHorizontal: 10,
+    marginBottom: 5, borderWidth: 1, borderColor: "#e2f0ec",
   },
-  queueCardMe: {
+  queueRowMe: {
     backgroundColor: "rgba(234, 246, 255, 0.94)",
     borderColor: "#7eb6f2", borderWidth: 1.5,
   },
-  avatar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "#e6f0ed", alignItems: "center", justifyContent: "center",
-    marginRight: 10, borderWidth: 1, borderColor: "#c8e0da",
-  },
-  avatarMe: { backgroundColor: "#2c7a6e", borderColor: "#2c7a6e" },
-  plate: { fontSize: 14, fontFamily: "digitalFont", color: "#2c7a6e", marginBottom: 1 },
-  name: { fontSize: 12, fontFamily: "monster_act", color: "#1a1a1a", marginBottom: 1 },
-  youTag: { color: "#2c7a6e", fontFamily: "monsterrat_font", fontWeight: "700" },
-  vType: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
-  rightCol: { alignItems: "flex-end", gap: 4 },
+  plate: { fontSize: 13, fontFamily: "digitalFont", color: "#2c7a6e" },
+  name: { fontSize: 11, fontFamily: "monster_act", color: "#1a1a1a" },
+  youTag: { fontSize: 11, color: "#2c7a6e", fontFamily: "monsterrat_font", fontWeight: "700" },
+  vType: { fontSize: 10, fontFamily: "monster_act", color: "#7f9f97", marginTop: 1 },
   posBadge: {
-    backgroundColor: "#2c7a6e", borderRadius: 16,
-    paddingHorizontal: 10, paddingVertical: 2,
+    backgroundColor: "#2c7a6e", borderRadius: 12,
+    minWidth: 38, alignItems: "center",
+    paddingHorizontal: 8, paddingVertical: 3,
   },
   posBadgeFirst: { backgroundColor: "#D85A30" },
+  posBadgeMe: { backgroundColor: "#2a7be4" },
   posText: { color: "#fff", fontSize: 11, fontFamily: "monsterrat_kp", fontWeight: "bold" },
   status: {
     fontSize: 10, fontFamily: "monsterrat_font", fontWeight: "600",
@@ -585,13 +626,24 @@ const styles = StyleSheet.create({
   statusOther: { backgroundColor: "#fff0db", color: "#c97e00" },
 
   row: {
-    position: "absolute", bottom: 25, width: "90%", alignSelf: "center",
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 12, borderRadius: 24, height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.94)",
-    borderWidth: 0.8, borderColor: "rgba(255, 255, 255, 0.25)",
-    shadowColor: "#000",
+    position: "absolute",
+    bottom: 22,
+    width: "94%",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    borderRadius: 26,
+    height: 56,
+    backgroundColor: "rgba(255, 255, 255, 0.23)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    shadowColor: "#1f3d3810",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 10, elevation: 6, zIndex: 20,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    zIndex: 20,
   },
 });

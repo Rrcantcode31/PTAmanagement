@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // CONFIGURATION
   // ==================================================
 
-  const CENTER = [6.48402898499551, 124.8519400126214];
+  const CENTER = [6.406406995679204, 124.80450565170412];
 
   const GET_DISPATCH_ZONE_API    = '/getDispatchAreZone';
   const POST_DISPATCH_ZONE_API   = '/postDispatchAreaZone';
@@ -1144,29 +1144,69 @@ document.addEventListener('DOMContentLoaded', function () {
   function initDriverTracking() {
 
     if (typeof io === 'undefined') {
-      console.error('Socket.IO client not found.');
+      console.error('[socket] Socket.IO client not found. Include socket.io-client script.');
       return;
     }
 
-    const socket = io(SOCKET_URL);
+    console.log('[socket] Connecting to', SOCKET_URL);
 
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+    });
+
+    // ---------- connection lifecycle ----------
     socket.on('connect', function () {
-      console.log('Connected to server:', socket.id);
+      console.log('[socket] ✅ Connected. id =', socket.id, '| transport =', socket.io.engine.transport.name);
+
+      // Subscribe to admin room so the server can broadcast driver updates
       socket.emit('admin:subscribe');
+      console.log('[socket] → emitted admin:subscribe');
+
+      // Re-check on transport upgrade
+      socket.io.engine.on('upgrade', function () {
+        console.log('[socket] transport upgraded to', socket.io.engine.transport.name);
+      });
+    });
+
+    socket.on('disconnect', function (reason) {
+      console.warn('[socket] ❌ Disconnected. Reason:', reason);
     });
 
     socket.on('connect_error', function (err) {
-      console.error('Socket connection failed:', err.message);
+      console.error('[socket] connect_error:', err.message);
     });
 
+    socket.on('reconnect', function (attempt) {
+      console.log('[socket] ✅ Reconnected after', attempt, 'attempts');
+    });
+
+    // ---------- DEBUG: log every event the admin receives ----------
+    // This is the single most useful diagnostic — if events show up here
+    // but no dot appears, the bug is in the handler below.
+    socket.onAny(function (eventName, ...args) {
+      console.log('[socket] ⬅️  received event:', eventName, args);
+    });
+
+    // ---------- driver location updates ----------
     socket.on('driver:location', function (data) {
 
-      const driverId = data.driverId;
-      const latitude = Number(data.latitude);
-      const longitude = Number(data.longitude);
+      console.log('[driver:location] raw payload:', data);
+
+      // Accept alternate key names, in case the backend uses snake_case
+      const driverId =
+        data.driverId ?? data.driver_id ?? data.driverInfoId ?? data.id;
+
+      const latitude  = Number(data.latitude  ?? data.lat);
+      const longitude = Number(data.longitude ?? data.lng ?? data.lon);
+
+      if (driverId == null) {
+        console.warn('[driver:location] ⚠️  Missing driverId in payload:', data);
+        return;
+      }
 
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        console.error('Invalid GPS coordinates:', data);
+        console.warn('[driver:location] ⚠️  Invalid GPS coordinates:', data);
         return;
       }
 
@@ -1178,50 +1218,66 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const withinRadius = distanceKm <= DRIVER_VISIBILITY_RADIUS_KM;
 
+      console.log(
+        `[driver:location] driver=${driverId} ` +
+        `(${latitude}, ${longitude}) ` +
+        `distance=${distanceKm.toFixed(3)} km ` +
+        `withinRadius=${withinRadius}`
+      );
+
       // If outside the radius and we already have a marker, remove it
       if (!withinRadius) {
         if (driverMarkers[driverId]) {
           map.removeLayer(driverMarkers[driverId]);
           delete driverMarkers[driverId];
+          console.log(`[driver:location] removed out-of-range marker for ${driverId}`);
+        } else {
+          console.log(`[driver:location] driver ${driverId} out of range — no marker to add`);
         }
         return;
       }
 
-      const status = data.status;
+      const status = data.status || 'INACTIVE';
       const zone = data.zone;
 
       const icon = driverDotIcon(status);
-      const popupText = `Driver #${driverId} — ${status}` +
+      const popupText =
+        `Driver #${driverId} — ${status}` +
         `${zone ? ' (' + zone + ')' : ''}<br>` +
-        `Distance: ${distanceKm.toFixed(2)} km`;
+        `Distance: ${distanceKm.toFixed(3)} km`;
 
       if (driverMarkers[driverId]) {
         // Update existing marker in place
         driverMarkers[driverId].setLatLng([latitude, longitude]);
         driverMarkers[driverId].setIcon(icon);
         driverMarkers[driverId].setPopupContent(popupText);
+        console.log(`[driver:location] updated marker for ${driverId}`);
       } else {
         // Create new marker — do NOT move the map view
         driverMarkers[driverId] = L.marker([latitude, longitude], { icon })
           .addTo(map)
           .bindPopup(popupText);
+        console.log(`[driver:location] ✅ added new marker for ${driverId}`);
       }
     });
 
     socket.on('driver:offline', function (data) {
-      const driverId = data.driverId;
+      const driverId =
+        data.driverId ?? data.driver_id ?? data.driverInfoId ?? data.id;
+
       if (driverMarkers[driverId]) {
         map.removeLayer(driverMarkers[driverId]);
         delete driverMarkers[driverId];
+        console.log(`[driver:offline] removed marker for ${driverId}`);
       }
     });
 
     socket.on('queue:driver_joined', function (entry) {
-      console.log('Driver joined queue:', entry);
+      console.log('[queue] driver joined:', entry);
     });
 
     socket.on('queue:driver_dispatched', function (entry) {
-      console.log('Driver dispatched:', entry);
+      console.log('[queue] driver dispatched:', entry);
     });
 
   }

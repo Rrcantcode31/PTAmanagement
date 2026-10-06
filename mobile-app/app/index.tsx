@@ -141,7 +141,6 @@ export default function Login() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
       <ImageBackground
         source={require("../assets/images/main-bg.png")}
         style={{ flex: 1 }}

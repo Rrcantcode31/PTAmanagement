@@ -9,9 +9,9 @@ import { WebView } from "react-native-webview";
 import { BlurView, BlurTargetView } from "expo-blur";
 import { useFonts } from "expo-font";
 import { usePathname } from "expo-router";
-import GridNavButton from "./components/GridNavButton";
-import { API_URL } from "./_layout";
-import { useAuth } from "../appContext/authContext";
+import GridNavButton from "../components/GridNavButton";
+import { useAuth } from "../../appContext/authContext";
+import { API_URL } from "../_layout";
 
 const { height: H } = Dimensions.get("window");
 
@@ -174,10 +174,12 @@ export default function Mapping() {
   const mapTargetRef = useRef(null);
 
   const [fontsLoaded] = useFonts({
-    monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
-    monsterrat_font: require("../assets/Font/monsterrat_font.ttf"),
-    monster_act: require("../assets/Font/monster_act.ttf"),
+    monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
+    monsterrat_font: require("../../assets/Font/monsterrat_font.ttf"),
+    monster_act: require("../../assets/Font/monster_act.ttf"),
+    digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
+
 
   // ---- Load terminals ----
   useEffect(() => {

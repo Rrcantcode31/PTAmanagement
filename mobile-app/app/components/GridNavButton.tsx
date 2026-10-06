@@ -1,6 +1,7 @@
 import React from "react";
 import { TouchableOpacity, Text, View, StyleSheet } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFonts } from "expo-font";
 import { router, Href } from "expo-router";
 
 type GridNavButtonProps = {
@@ -16,6 +17,16 @@ export default function GridNavButton({
   icon,
   active,
 }: GridNavButtonProps) {
+
+  const [fontsLoaded] = useFonts({
+    monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
+    monsterrat_font: require("../../assets/Font/monsterrat_font.ttf"),
+    monster_act: require("../../assets/Font/monster_act.ttf"),
+    digitalFont: require("../../assets/Font/digitalFont.ttf"),
+  });
+
+  if (!fontsLoaded) return null;
+
   return (
     <TouchableOpacity
       style={styles.button}
@@ -26,7 +37,7 @@ export default function GridNavButton({
         <MaterialCommunityIcons
           name={icon}
           size={18}
-          color={active ? "#00F0FF" : "rgba(255, 255, 255, 0.6)"}
+          color={active ? "#00F0FF" : "rgba(2, 2, 2, 0.6)"}
         />
       </View>
       <Text style={[styles.text, active && styles.activeText]}>
@@ -38,7 +49,7 @@ export default function GridNavButton({
 
 const styles = StyleSheet.create({
   button: {
-    flex: 1, // Expands to fill available width evenly
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 2,
@@ -56,11 +67,14 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 9,
-    color: "rgba(255, 255, 255, 0.5)",
+    fontFamily: "monsterrat_kp",
+    color: "rgba(5, 5, 5, 0.5)",
     marginTop: 1,
   },
+
   activeText: {
     color: "#00F0FF",
+    fontFamily: "monsterrat_font",
     fontWeight: "600",
     textShadowColor: "rgba(0, 240, 255, 0.6)",
     textShadowOffset: { width: 0, height: 0 },

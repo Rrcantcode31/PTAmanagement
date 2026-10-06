@@ -7,9 +7,9 @@ import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import GridNavButton from "./components/GridNavButton";
-import { useAuth } from "../appContext/authContext";
-
+import GridNavButton from "../components/GridNavButton";
+import { useAuth } from "../../appContext/authContext";
+import { API_URL } from "../_layout";
 // ---------- Light palette (matches FarePrices) ----------
 const C = {
   teal: "#319086",
@@ -46,10 +46,12 @@ export default function Profile() {
   const { user, logout } = useAuth();
 
   const [fontsLoaded] = useFonts({
-    monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
-    monsterrat_font: require("../assets/Font/monsterrat_font.ttf"),
-    monster_act: require("../assets/Font/monster_act.ttf"),
+    monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
+    monsterrat_font: require("../../assets/Font/monsterrat_font.ttf"),
+    monster_act: require("../../assets/Font/monster_act.ttf"),
+    digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
+
 
   if (!fontsLoaded) return null;
 
@@ -94,9 +96,8 @@ export default function Profile() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
       <ImageBackground
-        source={require("../assets/images/main-bg.png")}
+        source={require("../../assets/images/main-bg.png")}
         style={{ flex: 1 }}
         resizeMode="cover"
       >

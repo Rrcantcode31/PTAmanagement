@@ -10,9 +10,9 @@ import { BlurView, BlurTargetView } from "expo-blur";
 import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import GridNavButton from "./components/GridNavButton";
-import { useAuth } from "../appContext/authContext";
-import { API_URL } from "./_layout";
+import GridNavButton from "../components/GridNavButton";
+import { useAuth } from "../../appContext/authContext";
+import { API_URL } from "../_layout";
 
 const { width, height } = Dimensions.get("window");
 
@@ -127,11 +127,12 @@ export default function Dashboard() {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [fontsLoaded] = useFonts({
-    monsterrat_kp: require("../assets/Font/monsterrat_kp.ttf"),
-    monsterrat_font: require("../assets/Font/monsterrat_font.ttf"),
-    monster_act: require("../assets/Font/monster_act.ttf"),
-    digitalFont: require("../assets/Font/digitalFont.ttf"),
+    monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
+    monsterrat_font: require("../../assets/Font/monsterrat_font.ttf"),
+    monster_act: require("../../assets/Font/monster_act.ttf"),
+    digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
+
 
   // EFFECT 1 — Get GPS
   useEffect(() => {
@@ -556,7 +557,7 @@ export default function Dashboard() {
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ImageBackground
-        source={require("../assets/images/main-bg.png")}
+        source={require("../../assets/images/main-bg.png")}
         style={styles.background}
         resizeMode="cover"
       >
