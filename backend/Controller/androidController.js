@@ -15,7 +15,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // ================= STEP 1: CHECK USERAUTH =================
     const [users] = await db.promise().query(
       `SELECT 
           u.user_id AS id,
@@ -361,9 +360,8 @@ export const getDriverQueue = async (req, res) => {
       return res.status(400).json({ success: false, message: "driver_id required" });
     }
 
-    const HUB_TERMINAL_ID = 1; // Koronadal
+    const HUB_TERMINAL_ID = 1;
 
-    // ---- 1. Driver + vehicle info ----
     const [driverRows] = await db.promise().query(
       `SELECT
          d.driver_id,
@@ -704,6 +702,39 @@ export const getTripEstimate = async (req, res) => {
     });
   } catch (err) {
     console.error("getTripEstimate error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// GET /api/auth/driverStats?driver_id=X
+export const getDriverStats = async (req, res) => {
+  try {
+    const { driver_id } = req.query;
+    if (!driver_id) {
+      return res.status(400).json({ success: false, message: "driver_id required" });
+    }
+
+    const [rows] = await db.promise().query(
+      `SELECT
+         COALESCE(SUM(DATE(departure_time) = CURDATE()), 0)                                       AS trips_today,
+         COALESCE(SUM(departure_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)), 0) AS trips_this_week,
+         COALESCE(SUM(departure_time >= DATE_FORMAT(CURDATE(), '%Y-%m-01')), 0)                   AS trips_this_month
+       FROM departure_logs
+       WHERE driver_info_id = ?`,
+      [driver_id]
+    );
+
+    const r = rows[0] || {};
+    return res.json({
+      success: true,
+      data: {
+        tripsToday:     Number(r.trips_today)      || 0,
+        tripsThisWeek:  Number(r.trips_this_week)  || 0,
+        tripsThisMonth: Number(r.trips_this_month) || 0,
+      },
+    });
+  } catch (err) {
+    console.error("getDriverStats error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };

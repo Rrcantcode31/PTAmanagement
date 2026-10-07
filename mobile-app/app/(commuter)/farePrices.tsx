@@ -1,8 +1,8 @@
 import {
   View, Text, StyleSheet, ScrollView,
-  ImageBackground, StatusBar, ActivityIndicator,
+  ImageBackground, ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { BlurView } from 'expo-blur';
 import { usePathname } from "expo-router";
@@ -23,6 +23,7 @@ type Fare = {
 
 export default function FarePrices() {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const { token } = useAuth();
 
   const [fares, setFares]     = useState<Fare[]>([]);
@@ -35,6 +36,19 @@ export default function FarePrices() {
     monster_act: require("../../assets/Font/monster_act.ttf"),
     digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
+
+  // ============================================================
+  // Responsive bottom-nav positioning
+  // ============================================================
+  // iOS home indicator   → insets.bottom ≈ 34
+  // Android 3-button nav → insets.bottom ≈ 48
+  // Android gesture nav  → insets.bottom ≈ 0
+  const navHeight        = 56;
+  const navGap           = 12;   // breathing room above the OS zone
+  const navBottomOffset  = Math.max(insets.bottom, 8) + navGap;
+
+  // Total space the floating nav occupies from the bottom
+  const navTotalSpace    = navBottomOffset + navHeight + 12;
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +113,12 @@ export default function FarePrices() {
           </View>
 
           {/* ===== TABLE CARD ===== */}
-          <View style={styles.tableCard}>
+          <View
+            style={[
+              styles.tableCard,
+              { marginBottom: navTotalSpace }, // ← responsive to OS nav zone
+            ]}
+          >
             <BlurView intensity={40} tint="light" style={styles.blurFill}>
 
               {loading && (
@@ -189,11 +208,16 @@ export default function FarePrices() {
           </View>
 
           {/* ===== BOTTOM NAV ===== */}
-          <View style={styles.row}>
-             <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-              <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
-              <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple" active={pathname === "/farePrices"} />
-              <GridNavButton title="Profile" route="/profile" icon="account-circle" active={pathname === "/profile"} />
+          <View
+            style={[
+              styles.row,
+              { bottom: navBottomOffset }, // ← responsive to OS nav zone
+            ]}
+          >
+            <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+            <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
+            <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
+            <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
           </View>
 
         </View>
@@ -214,14 +238,13 @@ const TABLE_WIDTH = (COL_ROUTE + COL_TO + COL_KM + COL_FARE * 4) + GAP * NUM_GAP
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
 
-  // Transparent wrapper — the ImageBackground shows through the whole screen
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.38)',
   },
 
   // ============================================================
-  // HEADER CARD — "Fare prices" + LTFRB notice
+  // HEADER CARD
   // ============================================================
   headerCard: {
     marginHorizontal: 12,
@@ -235,13 +258,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
 
     borderWidth: 1,
-     borderColor: 'rgba(233, 240, 238, 0.44)',
-
-    shadowColor: '#f8f8f8',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: 'rgba(233, 240, 238, 0.44)',
   },
 
   welcome: {
@@ -259,12 +276,12 @@ const styles = StyleSheet.create({
   },
 
   // ============================================================
-  // TABLE CARD — big rounded container below the header
+  // TABLE CARD
+  // NOTE: `marginBottom` is applied dynamically via insets — see JSX
   // ============================================================
   tableCard: {
     flex: 1,
     marginHorizontal: 12,
-    marginBottom: 92,           // space for the floating bottom nav
     borderBottomRightRadius: 14,
     borderBottomLeftRadius: 14,
     overflow: 'hidden',
@@ -272,20 +289,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.72)',
     borderWidth: 1,
     borderColor: 'rgba(233, 240, 238, 0.44)',
-
-    shadowColor: '#f8f8f8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 10,
-    elevation: 5,
   },
 
-  // BlurView fills the table card
   blurFill: {
     flex: 1,
   },
 
-  // Horizontal scroll area inside the table card
   horizontalScroll: {
     flex: 1,
     paddingHorizontal: 10,
@@ -293,7 +302,7 @@ const styles = StyleSheet.create({
   },
 
   // ============================================================
-  // STATE (loading / error / empty)
+  // STATE
   // ============================================================
   stateBox: {
     flex: 1,
@@ -369,7 +378,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#319086',
   },
-  
+
   groupTitle: {
     fontSize: 13,
     color: '#319086',
@@ -406,28 +415,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ============================================================
-  // BOTTOM NAV
-  // ============================================================
   row: {
     position: "absolute",
-    bottom: 25,
-    width: "95%",
+    width: "94%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.94)",
-    borderWidth: 0.8,
-    borderColor: "rgba(255, 255, 255, 0.25)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+    paddingHorizontal: 10,
+    borderRadius: 26,
+    height: 56,
+    backgroundColor: "rgba(255, 255, 255, 0.23)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
     zIndex: 20,
   },
 });

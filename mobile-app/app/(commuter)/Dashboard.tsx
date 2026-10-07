@@ -1,8 +1,9 @@
 import {
   View, Text, StyleSheet, ImageBackground, Dimensions,
   ActivityIndicator, TouchableOpacity, Modal, FlatList, ScrollView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { usePathname } from "expo-router";
 import WebView from "react-native-webview";
@@ -18,9 +19,6 @@ const { width, height } = Dimensions.get("window");
 
 const HUB_TERMINAL_ID = 1;
 
-// ============================================================
-// Types
-// ============================================================
 type Terminal = {
   terminal_id: number;
   terminal_name: string;
@@ -64,6 +62,8 @@ type TripPlan = {
   stops: Stop[];
   legs: TripLeg[];
 };
+
+type MapType = "street" | "satellite";
 
 function greetingText() {
   const h = new Date().getHours();
@@ -109,11 +109,9 @@ function findNearest(list: Terminal[], lat: number, lng: number): Terminal | nul
   return best;
 }
 
-// ============================================================
-// Main screen
-// ============================================================
 export default function Dashboard() {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const { user, token } = useAuth();
   const webViewRef = useRef<WebView>(null);
   const mapTargetRef = useRef(null);
@@ -125,6 +123,7 @@ export default function Dashboard() {
   const [loadingTrip, setLoadingTrip] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [mapType, setMapType] = useState<MapType>("street");
 
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
@@ -133,6 +132,15 @@ export default function Dashboard() {
     digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
 
+  // ============================================================
+  // Responsive positioning
+  // ============================================================
+  // Bottom nav sits above the OS navigation zone:
+  //   iOS home indicator   → insets.bottom ≈ 34
+  //   Android 3-button nav → insets.bottom ≈ 48
+  //   Android gesture nav  → insets.bottom ≈ 0
+  // We add 12px of breathing room on top of the system inset.
+  const navBottomOffset = Math.max(insets.bottom, 8) + 12;
 
   // EFFECT 1 — Get GPS
   useEffect(() => {
@@ -341,7 +349,14 @@ export default function Dashboard() {
     }
   }, [tripPlan, destination]);
 
-  // Close details whenever destination is cleared
+  // EFFECT 5 — Push map type changes
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(`
+      window.setMapType?.("${mapType}");
+      true;
+    `);
+  }, [mapType]);
+
   useEffect(() => {
     if (!destination) setDetailsOpen(false);
   }, [destination]);
@@ -386,7 +401,11 @@ export default function Dashboard() {
     return styles.legBadgeMid;
   };
 
-  // Leaflet HTML — zoomControl disabled
+  const toggleMapType = () => {
+    setMapType((prev) => (prev === "street" ? "satellite" : "street"));
+  };
+
+  // Leaflet HTML — supports street + satellite, no attribution, no zoom buttons
   const leafletMapHTML = `
     <!DOCTYPE html>
     <html>
@@ -397,9 +416,8 @@ export default function Dashboard() {
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; overflow: hidden; }
-        #map { position: absolute; inset: 0; }
+        #map { position: absolute; inset: 0; background: #e9efe9; }
 
-        /* Hide the zoom control and attribution if present */
         .leaflet-control-zoom,
         .leaflet-control-attribution {
           display: none !important;
@@ -414,6 +432,39 @@ export default function Dashboard() {
         let accuracyCircle = null;
         let tripLayers = [];
         let tripMarkers = [];
+
+        // Tile layers (only one is attached at a time)
+        let streetLayer = null;
+        let satelliteLayer = null;
+
+        const STREET_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        const SATELLITE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+
+        function makeStreetLayer() {
+          return L.tileLayer(STREET_URL, { maxZoom: 19 });
+        }
+
+        function makeSatelliteLayer() {
+          return L.tileLayer(SATELLITE_URL, { maxZoom: 19 });
+        }
+
+        // Public: swap base layer
+        window.setMapType = function (type) {
+          if (!map) {
+            setTimeout(function () { window.setMapType(type); }, 400);
+            return;
+          }
+
+          if (type === 'satellite') {
+            if (streetLayer) { map.removeLayer(streetLayer); streetLayer = null; }
+            if (!satelliteLayer) { satelliteLayer = makeSatelliteLayer(); }
+            satelliteLayer.addTo(map);
+          } else {
+            if (satelliteLayer) { map.removeLayer(satelliteLayer); satelliteLayer = null; }
+            if (!streetLayer) { streetLayer = makeStreetLayer(); }
+            streetLayer.addTo(map);
+          }
+        };
 
         window.setUserLocation = function (latitude, longitude) {
           if (!map) {
@@ -536,17 +587,18 @@ export default function Dashboard() {
         function initMap() {
           const b = L.latLngBounds([[5.95, 124.53], [6.65, 125.4]]);
           map = L.map('map', {
-            zoomControl: false,                    // ← no +/- buttons
-            attributionControl: false,             // ← no attribution line
+            zoomControl: false,
+            attributionControl: false,
             maxBounds: b,
             maxBoundsViscosity: 1.0,
             minZoom: 11,
             maxZoom: 20,
           });
           map.fitBounds(b, { padding: [10, 10] });
-          L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-          }).addTo(map);
+
+          // Start with street tiles
+          streetLayer = makeStreetLayer();
+          streetLayer.addTo(map);
         }
         document.addEventListener('DOMContentLoaded', initMap);
       </script>
@@ -563,7 +615,7 @@ export default function Dashboard() {
       >
         <View style={styles.overlay}>
 
-          {/* ===== FULL-SCREEN MAP (wrapped as blur target) ===== */}
+          {/* ===== FULL-SCREEN MAP ===== */}
           <BlurTargetView ref={mapTargetRef} style={StyleSheet.absoluteFill}>
             <WebView
               ref={webViewRef}
@@ -574,6 +626,7 @@ export default function Dashboard() {
               domStorageEnabled
               geolocationEnabled
               onLoadEnd={() => {
+                // Restore user location
                 if (myLocation) {
                   webViewRef.current?.injectJavaScript(`
                     window.setUserLocation?.(${myLocation.lat}, ${myLocation.lng});
@@ -581,6 +634,13 @@ export default function Dashboard() {
                   `);
                 }
 
+                // Restore map type
+                webViewRef.current?.injectJavaScript(`
+                  window.setMapType?.("${mapType}");
+                  true;
+                `);
+
+                // Restore trip
                 const stops = tripPlan?.stops ?? [];
                 const legs = tripPlan?.legs ?? [];
 
@@ -613,6 +673,26 @@ export default function Dashboard() {
               {greetingText()}, {displayName}
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.mapToggle,
+              { bottom: navBottomOffset + 68 },
+            ]}
+            onPress={toggleMapType}
+            activeOpacity={0.85}
+            accessibilityLabel={
+              mapType === "satellite" ? "Switch to street view" : "Switch to satellite view"
+            }
+          >
+            <BlurView intensity={40} tint="light" style={styles.mapToggleBlur}>
+              <Ionicons
+                name={mapType === "satellite" ? "map-outline" : "earth-outline"}
+                size={18}
+                color="#1f6f66"
+              />
+            </BlurView>
+          </TouchableOpacity>
 
           {/* ===== FIELD CARD ===== */}
           <View style={styles.fieldCard}>
@@ -738,24 +818,18 @@ export default function Dashboard() {
               </View>
             )}
           </View>
-
-          {/* ===== BOTTOM NAV (frosted glass) ===== */}
-          <View style={styles.navRowWrap}>
-            <BlurView
-              intensity={80}
-              tint="light"
-              blurMethod="dimezisBlurView"
-              blurTarget={mapTargetRef}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.navRow}>
-              <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-              <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
-              <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
-              <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
-            </View>
+          
+          <View
+            style={[
+              styles.navRow,
+              { bottom: navBottomOffset },
+            ]}
+          >
+            <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+            <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
+            <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
+            <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
           </View>
-
         </View>
       </ImageBackground>
 
@@ -806,9 +880,6 @@ export default function Dashboard() {
   );
 }
 
-// ============================================================
-// Styles
-// ============================================================
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   background: { flex: 1 },
@@ -855,6 +926,29 @@ const styles = StyleSheet.create({
     fontFamily: "monster_act",
     color: "#2c3e50",
     textAlign: "right",
+  },
+
+   mapToggle: {
+    position: "absolute",
+    left: 15,          // aligns with the header card's left offset
+    zIndex: 8,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+
+  mapToggleBlur: {
+    width: 42,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // ============================================================
@@ -1022,38 +1116,28 @@ const styles = StyleSheet.create({
   },
 
   // ============================================================
-  // BOTTOM NAV — frosted glass container
+  // BOTTOM NAV
+  // NOTE: `bottom` is applied dynamically via insets — see `navBottomOffset`
   // ============================================================
-  navRowWrap: {
-    position: "absolute",
-    bottom: 25,
-    width: "95%",
-    alignSelf: "center",
-    zIndex: 10,
-    height: 46,
-    borderRadius: 24,
-    overflow: "hidden",
-
-    borderWidth: 0.8,
-    borderColor: "rgba(255, 255, 255, 0.55)",
-
-    // Subtle translucent white over the blur for extra readability
-    backgroundColor: "rgba(255, 255, 255, 0.28)",
-
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-
-  // Inner layout — no background, no rounding — the wrapper provides them
   navRow: {
-    flex: 1,
+    position: "absolute",
+    width: "94%",
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    borderRadius: 26,
+    height: 56,
+    backgroundColor: "rgba(255, 255, 255, 0.23)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    shadowColor: "#1f3d3810",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    zIndex: 20,
   },
 
   // ============================================================

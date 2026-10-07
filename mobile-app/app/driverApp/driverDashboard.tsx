@@ -9,7 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
@@ -23,17 +23,16 @@ import { API_URL } from "../_layout";
 type BackendStatus = "ACTIVE" | "INACTIVE" | "UNKNOWN";
 
 export default function DriverDashboard() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const pathname = usePathname();
+  const insets   = useSafeAreaInsets();
 
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("UNKNOWN");
   const [gpsReady, setGpsReady] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
-  const [shiftStartTime, setShiftStartTime] = useState<number | null>(null);
-  const [shiftSeconds, setShiftSeconds] = useState(0);
-
   const [earningsInput, setEarningsInput] = useState("");
+  const [tripsToday, setTripsToday] = useState(0);
 
   const socketRef = useRef<Socket | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -47,15 +46,64 @@ export default function DriverDashboard() {
   });
 
   // ============================================================
-  // SOCKET + GPS WATCHER (unchanged)
+  // Responsive layout constants
+  // ============================================================
+  const navHeight       = 56;
+  const navGap          = 12;
+  const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
+  const navTotalSpace   = navBottomOffset + navHeight + 12;
+
+  // Resolve driver id the same way the queue endpoint expects
+  const driverId =
+    (user as any)?.driverId ||
+    (user as any)?.driver_id ||
+    (user as any)?.id;
+
+  // ============================================================
+  // Fetch today's trips from the backend
+  // ============================================================
+  const fetchStats = async () => {
+    if (!driverId) return;
+    try {
+      const res = await fetch(
+        `${API_URL}/api/auth/driverStats?driver_id=${driverId}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Guard against HTML error pages (e.g. 404 page from Express)
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        console.warn(
+          "[dashboard] driverStats returned non-JSON:",
+          res.status,
+          contentType
+        );
+        return;
+      }
+
+      const json = await res.json();
+      if (json.success) {
+        setTripsToday(json.data.tripsToday || 0);
+      }
+    } catch (e) {
+      console.warn("[dashboard] stats fetch failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, [driverId]);
+
+  // ============================================================
+  // SOCKET + GPS WATCHER
   // ============================================================
   useEffect(() => {
     let mounted = true;
-
-    const driverId =
-      (user as any)?.driverId ||
-      (user as any)?.driver_id ||
-      (user as any)?.id;
 
     if (!driverId) {
       setGpsError("Missing driver ID — please log in again.");
@@ -73,25 +121,22 @@ export default function DriverDashboard() {
       socket.on("disconnect", () => {
         if (!mounted) return;
         setBackendStatus("UNKNOWN");
-        setShiftStartTime(null);
       });
 
       socket.on("driver:status", (payload: { status: string }) => {
         if (!mounted) return;
         const s = (payload?.status || "").toUpperCase();
-        if (s === "ACTIVE") {
-          setBackendStatus("ACTIVE");
-          setShiftStartTime((prev) => prev ?? Date.now());
-        } else {
-          setBackendStatus("INACTIVE");
-          setShiftStartTime(null);
-        }
+        setBackendStatus(s === "ACTIVE" ? "ACTIVE" : "INACTIVE");
       });
 
       socket.on("queue:joined", () => {
         if (!mounted) return;
         setBackendStatus("ACTIVE");
-        setShiftStartTime((prev) => prev ?? Date.now());
+      });
+
+      socket.on("queue:left", () => {
+        if (!mounted) return;
+        setBackendStatus("INACTIVE");
       });
 
       socket.on("queue:join:error", ({ message }: { message: string }) => {
@@ -100,6 +145,9 @@ export default function DriverDashboard() {
 
       socket.on("trip:started", (data: any) => {
         console.log("[driver] trip started:", data);
+        if (!mounted) return;
+        // Trip was just logged on the backend — refresh the daily count
+        fetchStats();
       });
 
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -141,22 +189,7 @@ export default function DriverDashboard() {
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [user]);
-
-  // ============================================================
-  // SHIFT TIMER
-  // ============================================================
-  useEffect(() => {
-    if (backendStatus !== "ACTIVE" || !shiftStartTime) {
-      setShiftSeconds(0);
-      return;
-    }
-    const tick = () =>
-      setShiftSeconds(Math.floor((Date.now() - shiftStartTime) / 1000));
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [backendStatus, shiftStartTime]);
+  }, [driverId]);
 
   if (!fontsLoaded) return null;
 
@@ -171,23 +204,12 @@ export default function DriverDashboard() {
     return "Good Evening";
   };
 
-  const formatShift = (total: number) => {
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(
-      2,
-      "0"
-    )}:${String(s).padStart(2, "0")}`;
-  };
-
   const earnings = parseFloat(earningsInput) || 0;
   const target = 2500;
   const earningsProgress = Math.min(earnings / target, 1);
   const remaining = Math.max(target - earnings, 0);
 
-  // TODO: replace with real data
-  const stats = { trips: 8 };
+  // TODO: replace queue + vehicle with real data later
   const queue = { position: 3, total: 12, etaMin: 12 };
   const vehicle = {
     plate: "ABC 1234",
@@ -196,17 +218,28 @@ export default function DriverDashboard() {
     status: "Active",
   };
 
-  const avgPerTrip = stats.trips > 0 ? Math.round(earnings / stats.trips) : 0;
+  const avgPerTrip = tripsToday > 0 ? Math.round(earnings / tripsToday) : 0;
   const driversAhead = Math.max(queue.position - 1, 0);
   const queueProgress = (queue.total - queue.position + 1) / queue.total;
   const isNext = isOnline && queue.position === 1;
 
+  // ============================================================
+  // Status display
+  // ============================================================
   const statusLabel = () => {
     if (gpsError) return "GPS ERROR";
     if (!gpsReady) return "LOCATING…";
-    if (backendStatus === "ACTIVE") return "ONLINE";
-    if (backendStatus === "INACTIVE") return "OFFLINE";
+    if (backendStatus === "ACTIVE") return "ACTIVE";
+    if (backendStatus === "INACTIVE") return "INACTIVE";
     return "CHECKING…";
+  };
+
+  const statusHeadline = () => {
+    if (gpsError) return "Location required";
+    if (!gpsReady) return "Finding you…";
+    if (backendStatus === "ACTIVE") return "You're in queue";
+    if (backendStatus === "INACTIVE") return "Outside queue area";
+    return "INACTIVE";
   };
 
   const statusColor = () => {
@@ -220,8 +253,10 @@ export default function DriverDashboard() {
   const statusSubtext = () => {
     if (gpsError) return gpsError;
     if (!gpsReady) return "Acquiring GPS signal…";
-    if (backendStatus === "ACTIVE") return "Inside terminal zone";
-    if (backendStatus === "INACTIVE") return "Outside terminal zone";
+    if (backendStatus === "ACTIVE")
+      return "You are counted in the queue";
+    if (backendStatus === "INACTIVE")
+      return "Move inside the terminal zone to join";
     return "Verifying location…";
   };
 
@@ -262,7 +297,7 @@ export default function DriverDashboard() {
               </TouchableOpacity>
             </View>
 
-            {/* 2 ── STATUS + SHIFT (am I online?) */}
+            {/* 2 ── STATUS HERO */}
             <BlurView intensity={45} tint="light" style={styles.heroCard}>
               <View style={styles.heroTopRow}>
                 <View
@@ -288,12 +323,16 @@ export default function DriverDashboard() {
                 </Text>
               </View>
 
-              <View style={styles.timerBlock}>
-                <Text style={styles.timerLabel}>On shift</Text>
+              <View style={styles.statusBlock}>
+                <Text style={styles.statusBlockLabel}>CURRENT STATUS</Text>
                 <Text
-                  style={[styles.timerValue, !isOnline && styles.dimmed]}
+                  style={[
+                    styles.statusBlockValue,
+                    { color: isOnline ? "#1f6f66" : "#64748B" },
+                  ]}
+                  numberOfLines={1}
                 >
-                  {isOnline ? formatShift(shiftSeconds) : "00:00:00"}
+                  {statusHeadline()}
                 </Text>
               </View>
 
@@ -305,7 +344,7 @@ export default function DriverDashboard() {
                     color="#7f9f97"
                   />
                   <Text style={styles.heroMetaText}>
-                    {isOnline ? "Tracking active" : "Not tracking"}
+                    {isOnline ? "In queue zone" : "Outside zone"}
                   </Text>
                 </View>
                 <View style={styles.heroMetaItem}>
@@ -321,7 +360,7 @@ export default function DriverDashboard() {
               </View>
             </BlurView>
 
-            {/* 3 ── QUEUE (what do I do next?) */}
+            {/* 3 ── QUEUE */}
             <BlurView intensity={40} tint="light" style={styles.glassCard}>
               <View style={styles.queueHeader}>
                 <Text style={styles.cardLabel}>Your queue</Text>
@@ -386,7 +425,7 @@ export default function DriverDashboard() {
               )}
             </BlurView>
 
-            {/* 4 ── VEHICLE (context for the queue) */}
+            {/* 4 ── VEHICLE */}
             <BlurView intensity={40} tint="light" style={styles.vehicleCard}>
               <View style={styles.vehicleIconWrap}>
                 <MaterialCommunityIcons
@@ -411,7 +450,7 @@ export default function DriverDashboard() {
               </View>
             </BlurView>
 
-            {/* 5 ── TODAY (trips + earnings, reviewed at end of a run) */}
+            {/* 5 ── TODAY */}
             <BlurView intensity={40} tint="light" style={styles.glassCard}>
               <View style={styles.earningsHeader}>
                 <View style={{ flex: 1 }}>
@@ -467,13 +506,13 @@ export default function DriverDashboard() {
               <View style={styles.todayStatsRow}>
                 <View style={styles.todayStat}>
                   <MaterialCommunityIcons
-                    name="steering"
+                    name="car"
                     size={18}
                     color="#319086"
                   />
                   <View>
-                    <Text style={styles.todayStatValue}>{stats.trips}</Text>
-                    <Text style={styles.todayStatLabel}>Trips</Text>
+                    <Text style={styles.todayStatValue}>{tripsToday}</Text>
+                    <Text style={styles.todayStatLabel}>Trips today</Text>
                   </View>
                 </View>
                 <View style={styles.todayStat}>
@@ -492,11 +531,16 @@ export default function DriverDashboard() {
               </View>
             </BlurView>
 
-            <View style={{ height: 110 }} />
+            <View style={{ height: navTotalSpace }} />
           </ScrollView>
 
           {/* ===== BOTTOM NAV ===== */}
-          <View style={styles.bottomBar}>
+          <View
+            style={[
+              styles.bottomBar,
+              { bottom: navBottomOffset },
+            ]}
+          >
             <GridNavButton
               title="Dashboard"
               route="./driverDashboard"
@@ -536,7 +580,6 @@ const styles = StyleSheet.create({
   bgImage: { flex: 1 },
   overlay: { flex: 1, backgroundColor: "rgba(255, 255, 255, 0.38)" },
   container: { paddingHorizontal: 16, paddingTop: 10 },
-  dimmed: { opacity: 0.35 },
 
   // ---------- header ----------
   headerRow: {
@@ -570,7 +613,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233,240,238,0.9)",
   },
 
-  // ---------- hero (status + timer) ----------
+  // ---------- hero (status only) ----------
   heroCard: {
     borderRadius: 22,
     paddingVertical: 16,
@@ -608,21 +651,27 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: "right",
   },
-  timerBlock: { alignItems: "center", paddingVertical: 10 },
-  timerLabel: {
-    fontSize: 11,
+
+  // ---------- big status display ----------
+  statusBlock: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  statusBlockLabel: {
+    fontSize: 10,
     fontFamily: "monsterrat_font",
     fontWeight: "700",
     color: "#7f9f97",
-    letterSpacing: 0.6,
-    marginBottom: 4,
+    letterSpacing: 1.6,
+    marginBottom: 6,
   },
-  timerValue: {
-    fontSize: 44,
-    fontFamily: "digitalFont",
-    color: "#1f6f66",
-    letterSpacing: 2,
+  statusBlockValue: {
+    fontSize: 30,
+    fontFamily: "monsterrat_kp",
+    letterSpacing: 0.5,
+    textAlign: "center",
   },
+
   heroBottomRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -850,7 +899,6 @@ const styles = StyleSheet.create({
   // ---------- bottom nav ----------
   bottomBar: {
     position: "absolute",
-    bottom: 22,
     width: "94%",
     alignSelf: "center",
     flexDirection: "row",
@@ -862,11 +910,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.23)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.9)",
-    shadowColor: "#1f3d3810",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
     zIndex: 20,
   },
 });

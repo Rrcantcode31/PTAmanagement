@@ -109,6 +109,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+        function showPrompt(message) {
+          tbody.innerHTML = '';
+          emptyState.style.display = 'block';   // ← this overrides your CSS entirely
+          emptyState.querySelector('p').textContent = message;
+          totalCount.textContent = '0 total departures';
+      }
+
   // ==================================================
   // Fetch logs
   // ==================================================
@@ -121,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Only load when a terminal is selected.
     if (!terminalId) {
-      showPrompt('Select a terminal to view departure logs.');
+      showPrompt();
       return;
     }
 

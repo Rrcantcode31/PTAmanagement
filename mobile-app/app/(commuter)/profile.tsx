@@ -1,16 +1,16 @@
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ImageBackground, StatusBar, Alert,
+  ImageBackground, Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import GridNavButton from "../components/GridNavButton";
 import { useAuth } from "../../appContext/authContext";
-import { API_URL } from "../_layout";
-// ---------- Light palette (matches FarePrices) ----------
+
+// ---------- Light palette ----------
 const C = {
   teal: "#319086",
   tealDark: "#1f6f66",
@@ -22,7 +22,6 @@ const C = {
   cardBorder: "rgba(233, 240, 238, 0.44)",
   rowAlt: "rgba(237, 246, 243, 0.5)",
   divider: "rgba(217, 230, 227, 0.9)",
-  // fare category accents
   green: "#2c7a6e",
   blue: "#1e88e5",
   purple: "#8e44ad",
@@ -30,7 +29,6 @@ const C = {
   red: "#e74c3c",
 };
 
-// Map the user's role to a friendly fare category label
 function getFareCategory(role: string | undefined) {
   if (!role) return { label: "Regular", short: "Regular", color: C.green };
 
@@ -43,6 +41,7 @@ function getFareCategory(role: string | undefined) {
 
 export default function Profile() {
   const pathname = usePathname();
+  const insets   = useSafeAreaInsets();
   const { user, logout } = useAuth();
 
   const [fontsLoaded] = useFonts({
@@ -52,6 +51,18 @@ export default function Profile() {
     digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
 
+  // ============================================================
+  // Responsive layout constants
+  // ============================================================
+  // iOS home indicator   → insets.bottom ≈ 34
+  // Android 3-button nav → insets.bottom ≈ 48
+  // Android gesture nav  → insets.bottom ≈ 0
+  const navHeight       = 56;
+  const navGap          = 12;
+  const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
+
+  // Total space the floating nav occupies from the bottom of the screen
+  const navTotalSpace   = navBottomOffset + navHeight + 12;
 
   if (!fontsLoaded) return null;
 
@@ -66,11 +77,9 @@ export default function Profile() {
   const fareCategory = getFareCategory(user?.role);
   const isDriver = user?.type === "driver";
 
-  // Broker-style account number
   const rawId = (user as any)?.accountId ?? (user as any)?.id ?? "";
   const accountId = rawId ? String(rawId).slice(-6).toUpperCase() : "000000";
 
-  // ---- Logout with confirmation ----
   const handleLogout = () => {
     Alert.alert(
       "Log out",
@@ -107,14 +116,6 @@ export default function Profile() {
             showsVerticalScrollIndicator={false}
           >
 
-            {/* ===== HEADER CARD ===== */}
-            <View style={styles.headerCard}>
-              <Text style={styles.welcome}>Profile</Text>
-              <Text style={styles.noticeBrand}>
-                Your commuter account details, fare category, and quick actions.
-              </Text>
-            </View>
-
             {/* ===== HERO / ACCOUNT CARD ===== */}
             <View style={styles.heroCard}>
               <BlurView intensity={40} tint="light" style={styles.blurFill}>
@@ -140,7 +141,7 @@ export default function Profile() {
                     </Text>
 
                     <View style={styles.idPill}>
-                      <Ionicons name="id-card-outline" size={11} color={C.muted} />
+                      <Ionicons name="card-outline" size={11} color={C.muted} />
                       <Text style={styles.idText}>ID • {accountId}</Text>
                     </View>
                   </View>
@@ -148,7 +149,6 @@ export default function Profile() {
 
                 <View style={styles.heroDivider} />
 
-                {/* Stat tiles */}
                 <View style={styles.statsRow}>
                   <Stat label="FARE" value={fareCategory.short} color={fareCategory.color} />
                   <View style={styles.statSep} />
@@ -180,28 +180,6 @@ export default function Profile() {
               />
             </View>
 
-            {/* ===== SECTION: QUICK ACTIONS ===== */}
-            <Text style={styles.sectionLabel}>QUICK ACTIONS</Text>
-            <View style={styles.card}>
-              <ActionRow
-                icon="map-outline"
-                label="View terminal routes"
-                onPress={() => router.push("/mapping")}
-              />
-              <Divider />
-              <ActionRow
-                icon="cash-outline"
-                label="Check fare prices"
-                onPress={() => router.push("/farePrices")}
-              />
-              <Divider />
-              <ActionRow
-                icon="navigate-outline"
-                label="Plan a trip"
-                onPress={() => router.push("/Dashboard")}
-              />
-            </View>
-
             {/* ===== SECTION: ABOUT ===== */}
             <Text style={styles.sectionLabel}>ABOUT</Text>
             <View style={styles.card}>
@@ -230,13 +208,18 @@ export default function Profile() {
 
             <Text style={styles.footer}>FareGo • v1.0.0</Text>
 
-            {/* Spacer so bottom nav doesn't cover content */}
-            <View style={{ height: 100 }} />
+            {/* Dynamic spacer — always clears the floating nav */}
+            <View style={{ height: navTotalSpace }} />
 
           </ScrollView>
 
-          {/* ===== BOTTOM NAV ===== */}
-          <View style={styles.row}>
+          {/* ===== BOTTOM NAV — responsive to OS navigation zone ===== */}
+          <View
+            style={[
+              styles.row,
+              { bottom: navBottomOffset },
+            ]}
+          >
             <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
             <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
             <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
@@ -286,22 +269,6 @@ function ProfileRow({
   );
 }
 
-function ActionRow({
-  icon, label, onPress,
-}: { icon: any; label: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.rowItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.rowIconWrap}>
-        <Ionicons name={icon} size={16} color={C.teal} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowValue}>{label}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={C.muted} />
-    </TouchableOpacity>
-  );
-}
-
 function Divider() {
   return <View style={styles.divider} />;
 }
@@ -312,11 +279,11 @@ function Divider() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
 
-  // Transparent overlay — main-bg shows through
   overlay: {
     flex: 1,
     backgroundColor: "rgba(255, 255, 255, 0.38)",
   },
+
   container: {
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -324,51 +291,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // ---------- header card ----------
-  headerCard: {
-    marginBottom: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderTopRightRadius: 14,
-    borderTopLeftRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "rgba(233, 240, 238, 0.44)",
-    shadowColor: "#f8f8f8",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  welcome: {
-    fontSize: 18,
-    fontFamily: "monsterrat_kp",
-    color: C.tealDark,
-    marginBottom: 2,
-  },
-  noticeBrand: {
-    color: C.sub,
-    fontFamily: "monster_act",
-    fontSize: 11,
-    lineHeight: 15,
-  },
-
   // ---------- hero card ----------
   heroCard: {
     marginBottom: 10,
-    borderBottomRightRadius: 14,
-    borderBottomLeftRadius: 14,
-    borderTopRightRadius: 14,
-    borderTopLeftRadius: 14,
+    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.72)",
     borderWidth: 1,
     borderColor: "rgba(233, 240, 238, 0.44)",
-    shadowColor: "#f8f8f8",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 10,
-    elevation: 5,
   },
   blurFill: { padding: 14 },
   heroTop: {
@@ -481,11 +411,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233, 240, 238, 0.44)",
     overflow: "hidden",
     marginBottom: 12,
-    shadowColor: "#f8f8f8",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
   },
   rowItem: {
     flexDirection: "row",
@@ -535,11 +460,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(231, 76, 60, 0.35)",
     paddingVertical: 15,
     borderRadius: 14,
-    shadowColor: "#f8f8f8",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
   },
   logoutText: {
     color: C.red,
@@ -557,26 +477,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  // ---------- bottom nav (matches FarePrices) ----------
+  // ---------- bottom nav ----------
+  // NOTE: `bottom` is applied dynamically via insets — see JSX
   row: {
     position: "absolute",
-    bottom: 25,
-    width: "95%",
+    width: "94%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.94)",
-    borderWidth: 0.8,
-    borderColor: "rgba(255, 255, 255, 0.25)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+    paddingHorizontal: 10,
+    borderRadius: 26,
+    height: 56,
+    backgroundColor: "rgba(255, 255, 255, 0.23)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
     zIndex: 20,
   },
 });

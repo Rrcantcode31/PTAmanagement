@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setToken(null);
     await AsyncStorage.multiRemove(['user', 'token']);
-    // Note: we keep auth_version so a fresh login just re-writes it
+  
   };
 
   return (

@@ -62,13 +62,12 @@ exports.Login = async (req, res) => {
     admin_profile: user.admin_profile,
 };
 
-    const cookieOptions = {
-      expires: new Date(
-        Date.now() + parseInt(process.env.COOKIE_EXPIRATION) * 24 * 60 * 60 * 1000
-      ),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production'
-    };
+   const cookieDays = parseInt(process.env.COOKIE_EXPIRATION, 10) || 90;
+      const cookieOptions = {
+        expires: new Date(Date.now() + cookieDays * 24 * 60 * 60 * 1000),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production'
+      };
 
     res.cookie('jwT', token, cookieOptions);
     res.cookie('randomSession', randomToken, cookieOptions);
@@ -887,6 +886,7 @@ exports.getDriverInfo = async (req, res) => {
   }
 };
 
+
 // Admin Permanently delete a driver (and their vehicle, if unshared)
 exports.DeleteDriverInfo = async (req, res) => {
   try {
@@ -1006,6 +1006,7 @@ exports.DeleteDriverInfo = async (req, res) => {
     });
   }
 };
+
 // {--- FARE PRICE BACKEND AREA ---}
 
 // Admin Insert Fare Prices

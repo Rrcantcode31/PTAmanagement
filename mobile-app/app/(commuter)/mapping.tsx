@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
   FlatList, ActivityIndicator, Dimensions, Pressable,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import { BlurView, BlurTargetView } from "expo-blur";
@@ -15,7 +15,6 @@ import { API_URL } from "../_layout";
 
 const { height: H } = Dimensions.get("window");
 
-const HEADER_TOP = 12;
 const EXPANDED_RATIO = 0.75;
 const COLLAPSED_VISIBLE_ROWS = 1;
 
@@ -161,6 +160,7 @@ function buildLeafletHTML(hub: Terminal | null, dest: Terminal | null): string {
 // ============================================================
 export default function Mapping() {
   const pathname = usePathname();
+  const insets   = useSafeAreaInsets();
   const { token } = useAuth();
 
   const [terminals, setTerminals]       = useState<Terminal[]>([]);
@@ -180,6 +180,16 @@ export default function Mapping() {
     digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
 
+  // ============================================================
+  // Responsive layout values
+  // ============================================================
+  // Top: the overlay sits below the safe-area top inset (notch/status bar)
+  const topOffset = Math.max(insets.top, 8) + 4;
+
+  // Bottom: nav sits above the OS nav zone (home indicator, 3-button, gesture)
+  const navHeight       = 56;
+  const navGap          = 12;
+  const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
 
   // ---- Load terminals ----
   useEffect(() => {
@@ -335,8 +345,13 @@ export default function Mapping() {
           />
         </BlurTargetView>
 
-        {/* Top overlay */}
-        <View style={styles.topOverlay}>
+        {/* Top overlay — respects safe-area top inset */}
+        <View
+          style={[
+            styles.topOverlay,
+            { paddingTop: topOffset }, // ← clears notch / Dynamic Island
+          ]}
+        >
 
           {/* ============ HEADER CARD ============ */}
           <View style={styles.headerCard}>
@@ -351,9 +366,6 @@ export default function Mapping() {
             <View style={styles.headerRow}>
               <Text style={styles.headerTitle}>Terminal Route</Text>
 
-              {/* ==============================================
-                  SELECT TERMINAL BUTTON
-              ============================================== */}
               <TouchableOpacity
                 style={styles.selectBtn}
                 onPress={() => setDropdownOpen(true)}
@@ -365,8 +377,6 @@ export default function Mapping() {
                 <Ionicons name="chevron-down" size={14} color="#1f6f66" />
               </TouchableOpacity>
             </View>
-
-            {/* Toggle handle line REMOVED from the header card */}
           </View>
 
           {/* ============ QUEUE / CONTENT PANEL ============ */}
@@ -406,7 +416,6 @@ export default function Mapping() {
                   <Ionicons name="location-outline" size={26} color="#7f9f97" />
                   <Text style={styles.stateText}>Please select terminal</Text>
                 </View>
-                {/* Handle kept in the panel */}
                 <View style={styles.handleWrap}>
                   <View style={styles.handle} />
                 </View>
@@ -415,12 +424,17 @@ export default function Mapping() {
           )}
         </View>
 
-        {/* Bottom nav */}
-        <View style={styles.row}>
-          <GridNavButton title="Dashboard" route="/Dashboard" icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
-          <GridNavButton title="Map routes" route="/mapping" icon="map-marker-path" active={pathname === "/mapping"} />
-          <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple" active={pathname === "/farePrices"} />
-          <GridNavButton title="Profile" route="/profile" icon="account-circle" active={pathname === "/profile"} />
+        {/* Bottom nav — respects OS nav zone */}
+        <View
+          style={[
+            styles.row,
+            { bottom: navBottomOffset }, // ← responsive to gesture/3-button nav
+          ]}
+        >
+          <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
+          <GridNavButton title="Map routes"  route="/mapping"    icon="map-marker-path"        active={pathname === "/mapping"} />
+          <GridNavButton title="Fare prices" route="/farePrices" icon="cash-multiple"          active={pathname === "/farePrices"} />
+          <GridNavButton title="Profile"     route="/profile"    icon="account-circle"         active={pathname === "/profile"} />
         </View>
 
       </View>
@@ -477,13 +491,13 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#e9efe9" },
   root: { flex: 1, backgroundColor: "#e9efe9" },
 
+  // NOTE: `paddingTop` is applied dynamically via insets — see JSX
   topOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 15,
-    paddingTop: HEADER_TOP,
     zIndex: 10,
     gap: 10,
   },
@@ -495,11 +509,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.7)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
   },
 
   headerRow: {
@@ -507,7 +516,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
-    paddingVertical: 12,     // even padding since we removed the handle
+    paddingVertical: 12,
     gap: 10,
   },
 
@@ -539,7 +548,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // Handle (kept in the queue panel)
   handleWrap: {
     alignItems: "center",
     paddingTop: 10,
@@ -554,16 +562,11 @@ const styles = StyleSheet.create({
 
   // ---------- Panel ----------
   queuePanel: {
-     borderBottomRightRadius: 14,
+    borderBottomRightRadius: 14,
     borderBottomLeftRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.7)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
   },
   queuePanelContent: {
     flex: 1,
@@ -660,25 +663,20 @@ const styles = StyleSheet.create({
   },
 
   // ---------- Bottom nav ----------
+  // NOTE: `bottom` is applied dynamically via insets — see JSX
   row: {
     position: "absolute",
-    bottom: 25,
-    width: "95%",
+    width: "94%",
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    height: 46,
-    backgroundColor: "rgba(233, 233, 233, 0.94)",
-    borderWidth: 0.8,
-    borderColor: "rgba(255, 255, 255, 0.25)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+    paddingHorizontal: 10,
+    borderRadius: 26,
+    height: 56,
+    backgroundColor: "rgba(255, 255, 255, 0.23)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.9)",
     zIndex: 20,
   },
 
@@ -694,11 +692,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 12,
     maxHeight: H * 0.7,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    elevation: 10,
   },
 
   modalTitle: {

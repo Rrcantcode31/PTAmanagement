@@ -7,15 +7,17 @@ import {
   Animated,
   Dimensions,
   Pressable,
+  StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { usePathname } from "expo-router";
 import { WebView } from "react-native-webview";
 import { BlurView, BlurTargetView } from "expo-blur";
 import GridNavButton from "../components/GridNavButton";
-import { useAuth } from "../../appContext/authContext";  // ← adjust path if needed
+import { useAuth } from "../../appContext/authContext";
+import { API_URL } from "../_layout";
 
 const { height: H } = Dimensions.get("window");
 
@@ -58,17 +60,11 @@ type DriverQueueResponse = {
   queue: QueueItem[];
 };
 
-// ---------- Config ----------
-const API_URL = "/driverQueue";
 
-// Koronadal hub fallback
 const HUB_FALLBACK = { lat: 6.48409, lng: 124.85211, name: "Koronadal City" };
 
-// ---------- Panel heights ----------
-// Collapsed panel shrinks when the "Your position" card is hidden.
 const COLLAPSED_H_WITH_ME = 245;
 const COLLAPSED_H_SOLO    = 168;
-// Expanded list is now compact — no longer takes most of the screen.
 const EXPANDED_H          = Math.min(H * 0.55, 460);
 
 // ============================================================
@@ -79,12 +75,10 @@ function buildLeafletHTML(
   myTerminalLng: number | null,
   myTerminalName: string | null,
 ): string {
-  // Koronadal hub — coordinates from terminal_locations (terminal_id = 1)
   const HUB = { lat: 6.484090, lng: 124.852111, name: "Koronadal City" };
 
   const hasMyTerminal = myTerminalLat != null && myTerminalLng != null;
 
-  // Center between the two terminals when both are known
   const center = hasMyTerminal
     ? {
         lat: (myTerminalLat + HUB.lat) / 2,
@@ -140,7 +134,6 @@ function buildLeafletHTML(
     const hubLng  = ${HUB.lng};
     const hubName = ${JSON.stringify(HUB.name)};
 
-    // -------- Red dot at hub (Koronadal) --------
     L.marker([hubLat, hubLng], {
       icon: L.divIcon({
         className: '',
@@ -150,7 +143,6 @@ function buildLeafletHTML(
       }),
     }).addTo(map).bindPopup(hubName);
 
-    // -------- Blue pin + open popup at the driver's terminal --------
     if (myLat != null && myLng != null) {
       L.marker([myLat, myLng], {
         icon: L.divIcon({
@@ -172,7 +164,6 @@ function buildLeafletHTML(
         .bindPopup(myName)
         .openPopup();
 
-      // -------- Road route between driver terminal and hub (OSRM) --------
       const osrmUrl =
         'https://router.project-osrm.org/route/v1/driving/' +
         myLng + ',' + myLat + ';' +
@@ -208,7 +199,8 @@ function buildLeafletHTML(
 // ============================================================
 export default function DriverQueue() {
   const pathname = usePathname();
-  const { user } = useAuth();   // ← driver from auth context
+  const insets   = useSafeAreaInsets();
+   const { user, token } = useAuth();
 
   const [queue, setQueue]   = useState<QueueItem[]>([]);
   const [route, setRoute]   = useState<RouteData>(null);
@@ -218,29 +210,41 @@ export default function DriverQueue() {
 
   const mapTargetRef = useRef(null);
 
+  // ============================================================
+  // Responsive layout constants
+  // ============================================================
+  // iOS home indicator   → insets.bottom ≈ 34
+  // Android 3-button nav → insets.bottom ≈ 48
+  // Android gesture nav  → insets.bottom ≈ 0
+  const navHeight       = 56;
+  const navGap          = 12;
+  const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
+
   // ---- Derived queue state ----
   const firstInQueue = queue.find((q) => q.queue_position === 1) || null;
   const me           = queue.find((q) => q.driver_id === user?.id) || null;
   const amFirst      = !!me && me.queue_position === 1;
 
-  // "Your position" shows ONLY when the driver is queued AND not 1st.
-  // Hidden when: not queued yet, or already 1st in line.
   const showMeCard = !!me && !amFirst;
   const collapsedH = showMeCard ? COLLAPSED_H_WITH_ME : COLLAPSED_H_SOLO;
 
   const panelHeight = useRef(new Animated.Value(COLLAPSED_H_WITH_ME)).current;
 
-  // ---- Fetch queue + route, then refresh every 10s so position stays live ----
   useEffect(() => {
-    if (!user?.id) return;   // wait for auth to hydrate
+    if (!user?.id) return;
 
     let cancelled = false;
 
     const load = async () => {
       try {
-        const res = await fetch(
-          `${API_URL}?driver_id=${user.id}`,
-          { credentials: "include" }
+       const res = await fetch(
+          `${API_URL}/api/auth/driverQueue?driver_id=${user.id}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
         const json: { success: boolean; data?: DriverQueueResponse; message?: string } =
           await res.json();
@@ -269,7 +273,6 @@ export default function DriverQueue() {
     };
   }, [user?.id]);
 
-  // ---- Resize the collapsed panel when the "Your position" card appears/hides ----
   useEffect(() => {
     if (expanded) return;
     Animated.spring(panelHeight, {
@@ -300,14 +303,12 @@ export default function DriverQueue() {
 
   if (!fontsLoaded) return null;
 
-  // Route subtitle — falls back to the driver's own terminal
   const routeLabel = route
     ? `Route: ${route.from.name} ↔ ${route.to.name}`
     : user?.terminal_name
       ? `Terminal: ${user.terminal_name}`
       : "Route: —";
 
-  // Build the map — uses the terminal coords from auth as fallback
   const leafletHTML = buildLeafletHTML(
     user?.terminal_lat ?? null,
     user?.terminal_lng ?? null,
@@ -316,6 +317,7 @@ export default function DriverQueue() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.root}>
 
         {/* FULL-SCREEN LEAFLET MAP */}
@@ -351,7 +353,6 @@ export default function DriverQueue() {
 
             {!expanded ? (
               <Pressable onPress={toggleExpanded} style={{ flex: 1 }}>
-                {/* 1st in queue — becomes "You're 1st" when it's the driver */}
                 <View style={styles.cardFirst}>
                   <View style={styles.cardFirstLeft}>
                     <Text style={styles.cardLabelLight}>
@@ -369,7 +370,6 @@ export default function DriverQueue() {
                   </View>
                 </View>
 
-                {/* Your position — hidden when the driver is already 1st */}
                 {showMeCard && me && (
                   <View style={styles.cardMe}>
                     <View style={styles.cardMeLeft}>
@@ -455,8 +455,13 @@ export default function DriverQueue() {
           </View>
         </Animated.View>
 
-        {/* BOTTOM NAV */}
-        <View style={styles.row}>
+        {/* BOTTOM NAV — responsive to OS nav zone */}
+        <View
+          style={[
+            styles.row,
+            { bottom: navBottomOffset },
+          ]}
+        >
           <GridNavButton
             title="Dashboard"
             route="./driverDashboard"
@@ -499,11 +504,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     zIndex: 10,
     backgroundColor: "transparent",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 10,
   },
   panelContent: {
     flex: 1,
@@ -526,9 +526,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#2c7a6e", borderRadius: 16,
     paddingVertical: 12, paddingHorizontal: 14,
     marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14, shadowRadius: 5, elevation: 3,
   },
   cardFirstLeft: { flex: 1 },
   cardLabelLight: {
@@ -552,9 +549,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#d7ebff", borderRadius: 16,
     paddingVertical: 10, paddingHorizontal: 14,
     borderWidth: 1.5, borderColor: "#7eb6f2",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
   cardMeInactive: { backgroundColor: "#fff7e6", borderColor: "#e6c98c" },
   cardMeLeft: { flex: 1 },
@@ -586,7 +580,6 @@ const styles = StyleSheet.create({
     width: 42, height: 4, borderRadius: 2, backgroundColor: "#c8d4d0",
   },
 
-  // ---------- compact list ----------
   listContent: { paddingTop: 2, paddingBottom: 6 },
   listHeader: {
     flexDirection: "row", justifyContent: "space-between",
@@ -625,9 +618,9 @@ const styles = StyleSheet.create({
   statusReady: { backgroundColor: "#e0f2e9", color: "#1e6f4c" },
   statusOther: { backgroundColor: "#fff0db", color: "#c97e00" },
 
+  // NOTE: `bottom` is applied dynamically via insets — see JSX
   row: {
     position: "absolute",
-    bottom: 22,
     width: "94%",
     alignSelf: "center",
     flexDirection: "row",
@@ -639,11 +632,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.23)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.9)",
-    shadowColor: "#1f3d3810",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
     zIndex: 20,
   },
 });

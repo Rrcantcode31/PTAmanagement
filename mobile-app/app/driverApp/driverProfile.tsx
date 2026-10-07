@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,20 +8,25 @@ import {
   ImageBackground,
   Modal,
   Pressable,
+  StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import GridNavButton from "../components/GridNavButton";
 import { useAuth } from "../../appContext/authContext";
+import { API_URL } from "../_layout";
 
 export default function DriverProfile() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const insets   = useSafeAreaInsets();
+  const { user, token, logout } = useAuth();
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [tripsThisWeek, setTripsThisWeek] = useState(0);
+  const [tripsThisMonth, setTripsThisMonth] = useState(0);
 
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
@@ -30,9 +35,53 @@ export default function DriverProfile() {
     digitalFont: require("../../assets/Font/digitalFont.ttf"),
   });
 
+  // ============================================================
+  // Responsive layout constants
+  // ============================================================
+  const navHeight       = 56;
+  const navGap          = 12;
+  const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
+  const navTotalSpace   = navBottomOffset + navHeight + 12;
+
+  const driverId =
+    (user as any)?.driverId ||
+    (user as any)?.driver_id ||
+    (user as any)?.id;
+
+  // ============================================================
+  // Fetch weekly + monthly trip counts
+  // ============================================================
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/auth/driverStats?driver_id=${driverId}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) {
+          setTripsThisWeek(json.data.tripsThisWeek || 0);
+          setTripsThisMonth(json.data.tripsThisMonth || 0);
+        }
+      } catch (e) {
+        console.warn("[driverProfile] stats fetch failed:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [driverId, token]);
+
   if (!fontsLoaded) return null;
 
-  // ---- Derive display data from auth user ----
   const displayName = user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Driver Partner"
     : "Driver Partner";
@@ -41,14 +90,7 @@ export default function DriverProfile() {
     ? `${(user.firstName || "?").charAt(0)}${(user.lastName || "?").charAt(0)}`.toUpperCase()
     : "?";
 
-  const driverId = user?.id ? `DRV-${String(user.id).padStart(5, "0")}` : "DRV-00000";
-
-  // ---- Dummy data (replace with real API later) ----
-  const shiftStats = {
-    tripsToday: 8,
-    hoursThisWeek: "32h 15m",
-    earningsThisMonth: 18450,
-  };
+  const driverId_label = user?.id ? `DRV-${String(user.id).padStart(5, "0")}` : "DRV-00000";
 
   const vehicle = {
     plate: "ABC 1234",
@@ -62,7 +104,6 @@ export default function DriverProfile() {
     id: user?.terminal_id || 1,
   };
 
-  // ---- Logout ----
   const handleLogoutConfirm = async () => {
     setShowLogoutModal(false);
     try {
@@ -75,6 +116,7 @@ export default function DriverProfile() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
       <ImageBackground
         source={require("../../assets/images/main-bg.png")}
         style={{ flex: 1 }}
@@ -123,12 +165,12 @@ export default function DriverProfile() {
                   size={12}
                   color="#7f9f97"
                 />
-                <Text style={styles.idText}>{driverId}</Text>
+                <Text style={styles.idText}>{driverId_label}</Text>
               </View>
             </BlurView>
 
-            {/* ===== SHIFT SUMMARY ===== */}
-            <Text style={styles.sectionLabel}>SHIFT SUMMARY</Text>
+            {/* ===== PERFORMANCE SUMMARY ===== */}
+            <Text style={styles.sectionLabel}>PERFORMANCE</Text>
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
                 <View style={styles.statIconWrap}>
@@ -138,8 +180,8 @@ export default function DriverProfile() {
                     color="#319086"
                   />
                 </View>
-                <Text style={styles.statValue}>{shiftStats.tripsToday}</Text>
-                <Text style={styles.statLabel}>TRIPS TODAY</Text>
+                <Text style={styles.statValue}>{tripsThisWeek}</Text>
+                <Text style={styles.statLabel}>TRIPS THIS WEEK</Text>
               </View>
 
               <View style={styles.statDivider} />
@@ -152,13 +194,13 @@ export default function DriverProfile() {
                   ]}
                 >
                   <MaterialCommunityIcons
-                    name="clock-outline"
+                    name="calendar-month"
                     size={18}
                     color="#2563EB"
                   />
                 </View>
-                <Text style={styles.statValue}>{shiftStats.hoursThisWeek}</Text>
-                <Text style={styles.statLabel}>THIS WEEK</Text>
+                <Text style={styles.statValue}>{tripsThisMonth}</Text>
+                <Text style={styles.statLabel}>TRIPS THIS MONTH</Text>
               </View>
 
               <View style={styles.statDivider} />
@@ -171,15 +213,13 @@ export default function DriverProfile() {
                   ]}
                 >
                   <MaterialCommunityIcons
-                    name="cash-multiple"
+                    name="star"
                     size={18}
                     color="#D97706"
                   />
                 </View>
-                <Text style={styles.statValue}>
-                  ₱{(shiftStats.earningsThisMonth / 1000).toFixed(1)}k
-                </Text>
-                <Text style={styles.statLabel}>THIS MONTH</Text>
+                <Text style={styles.statValue}>4.8</Text>
+                <Text style={styles.statLabel}>RATING</Text>
               </View>
             </View>
 
@@ -207,7 +247,7 @@ export default function DriverProfile() {
               <InfoRow
                 icon="card-account-details-outline"
                 label="Driver ID"
-                value={driverId}
+                value={driverId_label}
               />
             </BlurView>
 
@@ -319,11 +359,16 @@ export default function DriverProfile() {
 
             <Text style={styles.footer}>FareGo • Driver Partner</Text>
 
-            <View style={{ height: 110 }} />
+            <View style={{ height: navTotalSpace }} />
           </ScrollView>
 
           {/* ===== BOTTOM NAV ===== */}
-          <View style={styles.row}>
+          <View
+            style={[
+              styles.row,
+              { bottom: navBottomOffset },
+            ]}
+          >
             <GridNavButton
               title="Dashboard"
               route="./driverDashboard"
@@ -372,8 +417,7 @@ export default function DriverProfile() {
 
               <Text style={styles.modalTitle}>Log out?</Text>
               <Text style={styles.modalMessage}>
-                You will stop receiving trip requests and your shift timer will
-                pause. You can log back in anytime.
+                You will be removed from the queue and can log back in anytime.
               </Text>
 
               <View style={styles.modalActions}>
@@ -483,9 +527,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
 
-  // ============================================================
-  // IDENTITY CARD
-  // ============================================================
   identityCard: {
     borderRadius: 22,
     paddingVertical: 22,
@@ -497,9 +538,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.72)",
   },
-  avatarWrap: {
-    marginBottom: 12,
-  },
+  avatarWrap: { marginBottom: 12 },
   avatar: {
     width: 76,
     height: 76,
@@ -560,11 +599,7 @@ const styles = StyleSheet.create({
     color: "#319086",
     letterSpacing: 1,
   },
-  idRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
+  idRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   idText: {
     fontSize: 11,
     fontFamily: "digitalFont",
@@ -572,9 +607,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // ============================================================
-  // SECTION LABEL
-  // ============================================================
   sectionLabel: {
     fontSize: 10,
     fontFamily: "monsterrat_font",
@@ -586,9 +618,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  // ============================================================
-  // STATS ROW
-  // ============================================================
   statsRow: {
     flexDirection: "row",
     backgroundColor: "rgba(255, 255, 255, 0.72)",
@@ -599,11 +628,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233, 240, 238, 0.6)",
     alignItems: "center",
   },
-  statCard: {
-    flex: 1,
-    alignItems: "center",
-    gap: 3,
-  },
+  statCard: { flex: 1, alignItems: "center", gap: 3 },
   statIconWrap: {
     width: 34,
     height: 34,
@@ -625,6 +650,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#7f9f97",
     letterSpacing: 1,
+    textAlign: "center",
   },
   statDivider: {
     width: 1,
@@ -632,9 +658,6 @@ const styles = StyleSheet.create({
     height: 44,
   },
 
-  // ============================================================
-  // GENERIC CARD
-  // ============================================================
   card: {
     backgroundColor: "rgba(255, 255, 255, 0.72)",
     borderRadius: 18,
@@ -644,7 +667,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  // ---------- info rows ----------
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -684,7 +706,6 @@ const styles = StyleSheet.create({
     marginLeft: 58,
   },
 
-  // ---------- terminal ----------
   terminalRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -719,7 +740,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ---------- vehicle ----------
   vehicleTop: {
     flexDirection: "row",
     alignItems: "center",
@@ -791,9 +811,6 @@ const styles = StyleSheet.create({
     color: "#1f3d38",
   },
 
-  // ============================================================
-  // LOGOUT
-  // ============================================================
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -822,9 +839,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  // ============================================================
-  // LOGOUT MODAL
-  // ============================================================
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 30, 28, 0.4)",
@@ -869,11 +883,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    width: "100%",
-  },
+  modalActions: { flexDirection: "row", gap: 10, width: "100%" },
   modalBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -885,9 +895,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(127,159,151,0.3)",
   },
-  modalConfirmBtn: {
-    backgroundColor: "#e74c3c",
-  },
+  modalConfirmBtn: { backgroundColor: "#e74c3c" },
   modalCancelText: {
     color: "#4a5f5a",
     fontSize: 13,
@@ -901,12 +909,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ============================================================
-  // BOTTOM NAV
-  // ============================================================
   row: {
     position: "absolute",
-    bottom: 22,
     width: "94%",
     alignSelf: "center",
     flexDirection: "row",
@@ -918,11 +922,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.23)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.9)",
-    shadowColor: "#1f3d3810",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
     zIndex: 20,
   },
 });
