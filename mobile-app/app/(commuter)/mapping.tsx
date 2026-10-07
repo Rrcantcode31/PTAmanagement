@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal,
   FlatList, ActivityIndicator, Dimensions, Pressable,
@@ -16,7 +16,7 @@ import { API_URL } from "../_layout";
 const { height: H } = Dimensions.get("window");
 
 const EXPANDED_RATIO = 0.75;
-const COLLAPSED_VISIBLE_ROWS = 1;
+const COLLAPSED_VISIBLE_ROWS = 2;
 
 // ---------- Types ----------
 type Terminal = {
@@ -35,7 +35,30 @@ type QueueItem = {
   vehicle_type: string;
   queue_position: number;
   queue_status: "WAITING" | "QUEUED";
+  scheduled_dispatch_at?: string | null;
 };
+
+// ============================================================
+// Helpers
+// ============================================================
+function fmtEta(iso?: string | null): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+
+  const diffMs = t - Date.now();
+  const diffMin = Math.round(diffMs / 60000);
+
+  if (diffMin <= 0) return "Departing now";
+  if (diffMin < 1) return "Less than 1 min";
+  if (diffMin === 1) return "in 1 min";
+  if (diffMin < 60) return `in ${diffMin} min`;
+
+  const h = Math.floor(diffMin / 60);
+  const m = diffMin % 60;
+  if (m === 0) return `in ${h}h`;
+  return `in ${h}h ${m}m`;
+}
 
 // ============================================================
 // Leaflet HTML builder
@@ -170,6 +193,7 @@ export default function Mapping() {
   const [loadingQueue, setLoadingQueue] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [expanded, setExpanded]         = useState(false);
+  const [typeFilter, setTypeFilter]     = useState<string>("all");
 
   const mapTargetRef = useRef(null);
 
@@ -183,10 +207,8 @@ export default function Mapping() {
   // ============================================================
   // Responsive layout values
   // ============================================================
-  // Top: the overlay sits below the safe-area top inset (notch/status bar)
   const topOffset = Math.max(insets.top, 8) + 4;
 
-  // Bottom: nav sits above the OS nav zone (home indicator, 3-button, gesture)
   const navHeight       = 56;
   const navGap          = 12;
   const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
@@ -220,10 +242,13 @@ export default function Mapping() {
     if (!selected) {
       setQueue([]);
       setExpanded(false);
+      setTypeFilter("all");
       return;
     }
 
-    (async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         setLoadingQueue(true);
         const res = await fetch(
@@ -231,14 +256,28 @@ export default function Mapping() {
           { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } }
         );
         const json = await res.json();
-        setQueue(json.success && json.data ? (json.data.queue || []) : []);
+        if (!cancelled) {
+          setQueue(json.success && json.data ? (json.data.queue || []) : []);
+        }
       } catch (err) {
         console.error("queue fetch failed:", err);
-        setQueue([]);
+        if (!cancelled) setQueue([]);
       } finally {
-        setLoadingQueue(false);
+        if (!cancelled) setLoadingQueue(false);
       }
-    })();
+    };
+
+    // Reset filter when the terminal changes
+    setTypeFilter("all");
+
+    load();
+    // Refresh every 15s so the ETA countdown stays roughly accurate
+    const timer = setInterval(load, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [selected, token]);
 
   if (!fontsLoaded) return null;
@@ -246,11 +285,70 @@ export default function Mapping() {
   const leafletHTML = buildLeafletHTML(koronadal, selected);
 
   const hasTerminal = !!selected;
-  const hasQueue    = queue.length > 0;
-  const isExpanded  = expanded && hasQueue;
+
+  // ---- Vehicle types present in the queue ----
+  const vehicleTypes = useMemo(() => {
+    const set = new Set<string>();
+    queue.forEach((q) => {
+      if (q.vehicle_type) set.add(q.vehicle_type);
+    });
+    return Array.from(set);
+  }, [queue]);
+
+  // Only show the type toggle if there are 2+ distinct types
+  const showTypeToggle = vehicleTypes.length > 1;
+
+  // ---- Filtered queue based on the type toggle ----
+  const filteredQueue = useMemo(() => {
+    if (typeFilter === "all") return queue;
+    return queue.filter((q) => q.vehicle_type === typeFilter);
+  }, [queue, typeFilter]);
+
+  const hasQueue   = filteredQueue.length > 0;
+  const isExpanded = expanded && hasQueue;
+
+  const renderTypeToggle = () => {
+    if (!showTypeToggle) return null;
+
+    const options = ["all", ...vehicleTypes];
+
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.typeToggleRow}
+      >
+        {options.map((type) => {
+          const isActive = typeFilter === type;
+          const label = type === "all" ? "All" : type;
+          return (
+            <TouchableOpacity
+              key={type}
+              activeOpacity={0.75}
+              onPress={() => setTypeFilter(type)}
+              style={[
+                styles.typeChip,
+                isActive && styles.typeChipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.typeChipText,
+                  isActive && styles.typeChipTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    );
+  };
 
   const renderPanelBody = () => {
-    if (loadingQueue) {
+    if (loadingQueue && queue.length === 0) {
       return (
         <View style={styles.stateBox}>
           <ActivityIndicator size="small" color="#2c7a6e" />
@@ -259,71 +357,111 @@ export default function Mapping() {
       );
     }
 
-    if (!hasQueue) {
+    if (filteredQueue.length === 0) {
       return (
-        <View style={styles.stateBox}>
-          <Ionicons name="car-outline" size={28} color="#7f9f97" />
-          <Text style={styles.stateText}>No vehicle available yet</Text>
-        </View>
+        <>
+          {renderTypeToggle()}
+          <View style={styles.stateBox}>
+            <Ionicons name="car-outline" size={28} color="#7f9f97" />
+            <Text style={styles.stateText}>
+              {typeFilter === "all"
+                ? "No vehicle available yet"
+                : `No ${typeFilter} in queue`}
+            </Text>
+          </View>
+        </>
       );
     }
 
     const visibleQueue = isExpanded
-      ? queue
-      : queue.slice(0, COLLAPSED_VISIBLE_ROWS);
+      ? filteredQueue
+      : filteredQueue.slice(0, COLLAPSED_VISIBLE_ROWS);
 
     return (
       <>
+        {renderTypeToggle()}
+
         <ScrollView
           style={isExpanded ? { flex: 1 } : undefined}
           scrollEnabled={isExpanded}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
         >
-          {visibleQueue.map((q, idx) => (
-            <View
-              key={q.queue_id}
-              style={[styles.queuePill, idx === 0 && styles.queuePillFirst]}
-            >
-              <View style={[styles.queuePos, idx === 0 && styles.queuePosFirst]}>
-                <Text style={styles.queuePosText}>#{q.queue_position}</Text>
-              </View>
+          {visibleQueue.map((q) => {
+            const isFirst = q.queue_status === "WAITING";
+            const statusLabel =
+              q.queue_status === "WAITING" ? "Waiting" :
+              q.queue_status === "QUEUED"  ? "Queued"  :
+              q.queue_status;
+            const eta = fmtEta(q.scheduled_dispatch_at);
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.queueName} numberOfLines={1}>
-                  {q.driver_name}
-                </Text>
-                <Text style={styles.queueSub} numberOfLines={1}>
-                  {q.plate_number} · {q.vehicle_type}
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.queueStatus,
-                  idx === 0 ? styles.statusNext : styles.statusWait,
-                ]}
+            return (
+              <View
+                key={q.queue_id}
+                style={[styles.queuePill, isFirst && styles.queuePillFirst]}
               >
-                {idx === 0 ? "Next" : "Waiting"}
-              </Text>
-            </View>
-          ))}
+                {/* Position */}
+                <View style={[styles.queuePos, isFirst && styles.queuePosFirst]}>
+                  <Text style={styles.queuePosText}>#{q.queue_position}</Text>
+                </View>
+
+                {/* Plate + status */}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.plate} numberOfLines={1}>
+                    {q.plate_number || "—"}
+                  </Text>
+                  <View
+                    style={[
+                      styles.statusPill,
+                      isFirst ? styles.statusPillWaiting : styles.statusPillQueued,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusPillText,
+                        isFirst
+                          ? styles.statusPillTextWaiting
+                          : styles.statusPillTextQueued,
+                      ]}
+                    >
+                      {statusLabel}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ETA */}
+                <View style={styles.etaCol}>
+                  <Text style={styles.etaLabel}>Departs</Text>
+                  <Text
+                    style={[styles.etaValue, isFirst && styles.etaValueFirst]}
+                    numberOfLines={1}
+                  >
+                    {eta}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
         </ScrollView>
 
-        <Pressable
-          onPress={() => setExpanded(!expanded)}
-          style={styles.toggleBar}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={isExpanded ? "chevron-up" : "chevron-down"}
-            size={16}
-            color="#2c7a6e"
-          />
-          <Text style={styles.toggleText}>
-            {isExpanded ? "Collapse" : `Show all ${queue.length} queued`}
-          </Text>
-        </Pressable>
+        {filteredQueue.length > COLLAPSED_VISIBLE_ROWS && (
+          <Pressable
+            onPress={() => setExpanded(!expanded)}
+            style={styles.toggleBar}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={isExpanded ? "chevron-up" : "chevron-down"}
+              size={16}
+              color="#2c7a6e"
+            />
+            <Text style={styles.toggleText}>
+              {isExpanded
+                ? "Collapse"
+                : `Show all ${filteredQueue.length} queued`}
+            </Text>
+          </Pressable>
+        )}
       </>
     );
   };
@@ -345,15 +483,14 @@ export default function Mapping() {
           />
         </BlurTargetView>
 
-        {/* Top overlay — respects safe-area top inset */}
+        {/* Top overlay */}
         <View
           style={[
             styles.topOverlay,
-            { paddingTop: topOffset }, // ← clears notch / Dynamic Island
+            { paddingTop: topOffset },
           ]}
         >
-
-          {/* ============ HEADER CARD ============ */}
+          {/* HEADER CARD */}
           <View style={styles.headerCard}>
             <BlurView
               intensity={100}
@@ -379,7 +516,7 @@ export default function Mapping() {
             </View>
           </View>
 
-          {/* ============ QUEUE / CONTENT PANEL ============ */}
+          {/* QUEUE PANEL */}
           {hasTerminal && (
             <View
               style={[
@@ -401,7 +538,7 @@ export default function Mapping() {
             </View>
           )}
 
-          {/* When no terminal is picked, still show the prompt card */}
+          {/* NO-TERMINAL PROMPT */}
           {!hasTerminal && (
             <View style={styles.queuePanel}>
               <BlurView
@@ -424,11 +561,11 @@ export default function Mapping() {
           )}
         </View>
 
-        {/* Bottom nav — respects OS nav zone */}
+        {/* Bottom nav */}
         <View
           style={[
             styles.row,
-            { bottom: navBottomOffset }, // ← responsive to gesture/3-button nav
+            { bottom: navBottomOffset },
           ]}
         >
           <GridNavButton title="Dashboard"   route="/Dashboard"  icon="view-dashboard-outline" active={pathname === "/Dashboard"} />
@@ -491,7 +628,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#e9efe9" },
   root: { flex: 1, backgroundColor: "#e9efe9" },
 
-  // NOTE: `paddingTop` is applied dynamically via insets — see JSX
   topOverlay: {
     position: "absolute",
     top: 0,
@@ -527,7 +663,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
-  // ---------- Select terminal button ----------
   selectBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -589,6 +724,36 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  // ---------- Vehicle type filter ----------
+  typeToggleRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 2,
+  },
+  typeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(200, 220, 215, 0.9)",
+  },
+  typeChipActive: {
+    backgroundColor: "#2c7a6e",
+    borderColor: "#2c7a6e",
+  },
+  typeChipText: {
+    fontSize: 11,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#2c7a6e",
+    letterSpacing: 0.3,
+  },
+  typeChipTextActive: {
+    color: "#fff",
+  },
+
   // ---------- Queue rows ----------
   queuePill: {
     flexDirection: "row",
@@ -599,7 +764,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(200, 220, 215, 0.9)",
     paddingHorizontal: 10,
     paddingVertical: 10,
-    gap: 10,
+    gap: 12,
   },
   queuePillFirst: {
     borderColor: "#D85A30",
@@ -620,28 +785,55 @@ const styles = StyleSheet.create({
     fontFamily: "monsterrat_kp",
     fontWeight: "bold",
   },
-  queueName: {
+
+  // ---------- Plate ----------
+  plate: {
+    fontSize: 14,
+    fontFamily: "digitalFont",
+    color: "#1a1a1a",
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+
+  // ---------- Status pill ----------
+  statusPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  statusPillWaiting: { backgroundColor: "#ffe6d6" },
+  statusPillQueued: { backgroundColor: "#e6f0ed" },
+  statusPillText: {
+    fontSize: 9,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  statusPillTextWaiting: { color: "#b8491d" },
+  statusPillTextQueued: { color: "#2c7a6e" },
+
+  // ---------- ETA ----------
+  etaCol: {
+    alignItems: "flex-end",
+    minWidth: 88,
+  },
+  etaLabel: {
+    fontSize: 9,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#7f9f97",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  etaValue: {
     fontSize: 12,
     fontFamily: "monsterrat_kp",
-    color: "#1a1a1a",
+    color: "#2c7a6e",
   },
-  queueSub: {
-    fontSize: 10,
-    fontFamily: "monster_act",
-    color: "#7f9f97",
-    marginTop: 1,
-  },
-  queueStatus: {
-    fontSize: 10,
-    fontFamily: "monsterrat_font",
-    fontWeight: "600",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  statusNext: { backgroundColor: "#ffe6d6", color: "#b8491d" },
-  statusWait: { backgroundColor: "#fff0db", color: "#c97e00" },
+  etaValueFirst: { color: "#D85A30" },
 
   toggleBar: {
     flexDirection: "row",
@@ -663,7 +855,6 @@ const styles = StyleSheet.create({
   },
 
   // ---------- Bottom nav ----------
-  // NOTE: `bottom` is applied dynamically via insets — see JSX
   row: {
     position: "absolute",
     width: "94%",

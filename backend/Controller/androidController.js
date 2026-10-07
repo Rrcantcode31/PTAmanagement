@@ -280,34 +280,6 @@ export const getRoles = async (req, res) => {
   }
 };
 
-// Getter driver info
-export const getDriverInfo = async (req, res) => {
-  try{
-    const getInfo = 
-      `SELECT   
-      v.type_name, 
-      d.first_name, 
-      d.middle_name, 
-      d.last_name, 
-      d.contact_number, 
-      r.status,
-      t.plate_number,
-      v.seat_capacity
-      FROM  driver_info d
-      LEFT JOIN driverauth r ON d.driver_id = r.driver_id
-      LEFT JOIN vehicles t ON d.vehicle_id = t.vehicle_id
-      LEFT JOIN vehicle_types v ON  t.type_id = v.type_id
-      `;
-
-      const [rows] = await db.promise().query(getInfo);
-
-    res.json(rows);
-  } catch {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch fare prices' });
-  }
-};
-
 // GetAllTerminalLocations
 export const GetAllTerminalLocations = async (req, res) => {
   try {
@@ -486,7 +458,6 @@ export const getDriverQueue = async (req, res) => {
   }
 };
 
-// Terminal queue + route (for commuter-facing map)
 export const getTerminalQueue = async (req, res) => {
   try {
     const { terminal_id } = req.query;
@@ -496,7 +467,7 @@ export const getTerminalQueue = async (req, res) => {
 
     const HUB_TERMINAL_ID = 1; // Koronadal
 
-    // Get hub + selected terminal coords
+    // ---- Get hub + selected terminal coords ----
     const [termRows] = await db.promise().query(
       `SELECT terminal_id, terminal_name, latitude, longitude
          FROM terminal_locations
@@ -511,12 +482,13 @@ export const getTerminalQueue = async (req, res) => {
       return res.status(404).json({ success: false, message: "Terminal not found" });
     }
 
-    // Queue for the selected terminal
+    // ---- Queue for the selected terminal ----
     const [queueRows] = await db.promise().query(
       `SELECT
          q.queue_id,
          q.driver_info_id AS driver_id,
          q.queue_status,
+         q.scheduled_dispatch_at,              -- ← now returned to the client
          ROW_NUMBER() OVER (
            ORDER BY
              CASE q.queue_status WHEN 'WAITING' THEN 0 ELSE 1 END,
@@ -527,10 +499,10 @@ export const getTerminalQueue = async (req, res) => {
          v.plate_number,
          vt.type_name AS vehicle_type
        FROM vehicle_queue q
-       JOIN driver_info d        ON q.driver_info_id = d.driver_id
-       JOIN vehicles v           ON q.vehicle_id     = v.vehicle_id
-       LEFT JOIN vehicle_types vt ON v.type_id       = vt.type_id
-       LEFT JOIN dispatch_zones dz ON q.zone_id      = dz.zone_id
+       JOIN driver_info d         ON q.driver_info_id = d.driver_id
+       JOIN vehicles v            ON q.vehicle_id     = v.vehicle_id
+       LEFT JOIN vehicle_types vt ON v.type_id        = vt.type_id
+       LEFT JOIN dispatch_zones dz ON q.zone_id       = dz.zone_id
        WHERE q.queue_status IN ('WAITING', 'QUEUED')
          AND dz.terminal_id = ?
        ORDER BY queue_position ASC`,
@@ -553,13 +525,13 @@ export const getTerminalQueue = async (req, res) => {
           lng:  Number(dest.longitude),
         },
         queue: queueRows.map(q => ({
-          queue_id:       q.queue_id,
-          driver_id:      q.driver_id,
-          driver_name:    [q.first_name, q.middle_name, q.last_name].filter(Boolean).join(" "),
-          plate_number:   q.plate_number,
-          vehicle_type:   q.vehicle_type,
-          queue_position: q.queue_position,
-          queue_status:   q.queue_status,
+          queue_id:              q.queue_id,
+          driver_id:             q.driver_id,
+          plate_number:          q.plate_number,
+          vehicle_type:          q.vehicle_type,
+          queue_position:        q.queue_position,
+          queue_status:          q.queue_status,
+          scheduled_dispatch_at: q.scheduled_dispatch_at,   // ← ADD
         })),
       },
     });
@@ -738,3 +710,4 @@ export const getDriverStats = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+

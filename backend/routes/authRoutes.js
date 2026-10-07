@@ -17,7 +17,6 @@ router.get('/getRoles', getRoles);
 router.get('/terminalQueue', verifyToken, getTerminalQueue);
 router.get('/getTerminalsLocation', verifyToken, GetAllTerminalLocations);
 router.get('/Fare', verifyToken, requireType('driver', 'user'), getFarePrices);
-router.get ('/getDriverInfo', verifyToken, requireType('driver'), getDriverInfo);
 router.get('/driverQueue', verifyToken, requireType('driver', 'user'), getDriverQueue);
 router.get('/nearbyTerminals', verifyToken, getNearbyTerminals);
 router.get('/tripEstimate', verifyToken, getTripEstimate);
