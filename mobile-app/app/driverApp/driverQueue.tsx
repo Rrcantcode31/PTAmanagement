@@ -6,8 +6,7 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Pressable,
-  StatusBar,
+  Pressable
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -317,7 +316,6 @@ export default function DriverQueue() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
       <View style={styles.root}>
 
         {/* FULL-SCREEN LEAFLET MAP */}

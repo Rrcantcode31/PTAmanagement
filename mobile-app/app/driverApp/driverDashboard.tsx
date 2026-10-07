@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ImageBackground,
-  TextInput,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,8 +30,12 @@ export default function DriverDashboard() {
   const [gpsReady, setGpsReady] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
-  const [earningsInput, setEarningsInput] = useState("");
   const [tripsToday, setTripsToday] = useState(0);
+
+  const [vehicle, setVehicle] = useState({
+    plate: "—",
+    type: "—",
+  });
 
   const socketRef = useRef<Socket | null>(null);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -53,7 +56,6 @@ export default function DriverDashboard() {
   const navBottomOffset = Math.max(insets.bottom, 8) + navGap;
   const navTotalSpace   = navBottomOffset + navHeight + 12;
 
-  // Resolve driver id the same way the queue endpoint expects
   const driverId =
     (user as any)?.driverId ||
     (user as any)?.driver_id ||
@@ -75,7 +77,6 @@ export default function DriverDashboard() {
         }
       );
 
-      // Guard against HTML error pages (e.g. 404 page from Express)
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) {
         console.warn(
@@ -98,6 +99,40 @@ export default function DriverDashboard() {
   useEffect(() => {
     fetchStats();
   }, [driverId]);
+
+  // ============================================================
+  // Fetch vehicle info (plate + real vehicle type)
+  // ============================================================
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/auth/driverQueue?driver_id=${driverId}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data?.driver) {
+          setVehicle({
+            plate: json.data.driver.plate_number || "—",
+            type:  json.data.driver.vehicle_type || "—",
+          });
+        }
+      } catch (e) {
+        console.warn("[dashboard] vehicle fetch failed:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [driverId, token]);
 
   // ============================================================
   // SOCKET + GPS WATCHER
@@ -146,7 +181,6 @@ export default function DriverDashboard() {
       socket.on("trip:started", (data: any) => {
         console.log("[driver] trip started:", data);
         if (!mounted) return;
-        // Trip was just logged on the backend — refresh the daily count
         fetchStats();
       });
 
@@ -204,21 +238,9 @@ export default function DriverDashboard() {
     return "Good Evening";
   };
 
-  const earnings = parseFloat(earningsInput) || 0;
-  const target = 2500;
-  const earningsProgress = Math.min(earnings / target, 1);
-  const remaining = Math.max(target - earnings, 0);
-
-  // TODO: replace queue + vehicle with real data later
+  // TODO: replace queue with real data later
   const queue = { position: 3, total: 12, etaMin: 12 };
-  const vehicle = {
-    plate: "ABC 1234",
-    model: "Toyota Hiace UV Express",
-    capacity: 14,
-    status: "Active",
-  };
 
-  const avgPerTrip = tripsToday > 0 ? Math.round(earnings / tripsToday) : 0;
   const driversAhead = Math.max(queue.position - 1, 0);
   const queueProgress = (queue.total - queue.position + 1) / queue.total;
   const isNext = isOnline && queue.position === 1;
@@ -425,7 +447,7 @@ export default function DriverDashboard() {
               )}
             </BlurView>
 
-            {/* 4 ── VEHICLE */}
+            {/* 4 ── VEHICLE + TRIP COUNT */}
             <BlurView intensity={40} tint="light" style={styles.vehicleCard}>
               <View style={styles.vehicleIconWrap}>
                 <MaterialCommunityIcons
@@ -437,97 +459,20 @@ export default function DriverDashboard() {
 
               <View style={{ flex: 1 }}>
                 <Text style={styles.vehicleModel} numberOfLines={1}>
-                  {vehicle.model}
+                  {vehicle.type}
                 </Text>
                 <Text style={styles.vehiclePlate}>
-                  {vehicle.plate} • {vehicle.capacity} seats
+                  {vehicle.plate}
                 </Text>
               </View>
 
-              <View style={styles.vehicleStatusPill}>
-                <View style={styles.vehicleStatusDot} />
-                <Text style={styles.vehicleStatusText}>{vehicle.status}</Text>
-              </View>
-            </BlurView>
+              {/* Divider between vehicle info and trip count */}
+              <View style={styles.vehicleDivider} />
 
-            {/* 5 ── TODAY */}
-            <BlurView intensity={40} tint="light" style={styles.glassCard}>
-              <View style={styles.earningsHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardLabel}>Today</Text>
-                  <Text style={styles.earningsSubtext}>
-                    Enter your total income so far
-                  </Text>
-                </View>
-                <View style={styles.targetPill}>
-                  <Text style={styles.targetText}>
-                    Goal ₱{target.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.earningsInputRow}>
-                <Text style={styles.earningsCurrency}>₱</Text>
-                <TextInput
-                  style={styles.earningsInput}
-                  value={earningsInput}
-                  onChangeText={(t) =>
-                    setEarningsInput(t.replace(/[^0-9.]/g, ""))
-                  }
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#b5c4c0"
-                  returnKeyType="done"
-                />
-              </View>
-
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${earningsProgress * 100}%` },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.progressMeta}>
-                <Text style={styles.progressHint}>
-                  {Math.round(earningsProgress * 100)}% of daily goal
-                </Text>
-                <Text style={styles.progressHint}>
-                  {remaining > 0
-                    ? `₱${remaining.toLocaleString()} to go`
-                    : "Goal reached 🎉"}
-                </Text>
-              </View>
-
-              <View style={styles.todayDivider} />
-
-              <View style={styles.todayStatsRow}>
-                <View style={styles.todayStat}>
-                  <MaterialCommunityIcons
-                    name="car"
-                    size={18}
-                    color="#319086"
-                  />
-                  <View>
-                    <Text style={styles.todayStatValue}>{tripsToday}</Text>
-                    <Text style={styles.todayStatLabel}>Trips today</Text>
-                  </View>
-                </View>
-                <View style={styles.todayStat}>
-                  <MaterialCommunityIcons
-                    name="cash"
-                    size={18}
-                    color="#319086"
-                  />
-                  <View>
-                    <Text style={styles.todayStatValue}>
-                      ₱{avgPerTrip.toLocaleString()}
-                    </Text>
-                    <Text style={styles.todayStatLabel}>Avg per trip</Text>
-                  </View>
-                </View>
+              {/* Trips today */}
+              <View style={styles.tripsCol}>
+                <Text style={styles.tripsValue}>{tripsToday}</Text>
+                <Text style={styles.tripsLabel}>Trip today</Text>
               </View>
             </BlurView>
 
@@ -652,7 +597,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  // ---------- big status display ----------
   statusBlock: {
     alignItems: "center",
     paddingVertical: 20,
@@ -757,101 +701,14 @@ const styles = StyleSheet.create({
     color: "#475569",
   },
 
-  // ---------- earnings / today ----------
-  earningsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 14,
-    gap: 8,
-  },
-  earningsSubtext: {
-    fontSize: 12,
-    fontFamily: "monster_act",
-    color: "#334155",
-    marginTop: 3,
-  },
-  targetPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.7)",
-    borderWidth: 1,
-    borderColor: "rgba(233,240,238,0.9)",
-  },
-  targetText: {
-    fontSize: 10,
-    fontFamily: "monsterrat_font",
-    fontWeight: "700",
-    color: "#7f9f97",
-    letterSpacing: 0.4,
-  },
-  earningsInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.65)",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(49,144,134,0.22)",
-    paddingHorizontal: 16,
-    marginBottom: 14,
-  },
-  earningsCurrency: {
-    fontSize: 22,
-    fontFamily: "digitalFont",
-    color: "#1f6f66",
-    marginRight: 8,
-  },
-  earningsInput: {
-    flex: 1,
-    paddingVertical: 14,
-    fontFamily: "digitalFont",
-    fontSize: 24,
-    color: "#1f6f66",
-    letterSpacing: 1,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(49,144,134,0.15)",
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 4,
-    backgroundColor: "#319086",
-  },
-  progressMeta: { flexDirection: "row", justifyContent: "space-between" },
-  progressHint: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
-  todayDivider: {
-    height: 1,
-    backgroundColor: "rgba(233,240,238,0.9)",
-    marginVertical: 14,
-  },
-  todayStatsRow: { flexDirection: "row", gap: 12 },
-  todayStat: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  todayStatValue: {
-    fontSize: 17,
-    fontFamily: "digitalFont",
-    color: "#1f3d38",
-    letterSpacing: 0.5,
-  },
-  todayStatLabel: { fontSize: 11, fontFamily: "monster_act", color: "#7f9f97" },
-
-  // ---------- vehicle ----------
+  // ---------- vehicle + trips ----------
   vehicleCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     backgroundColor: CARD_BG,
     borderRadius: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     marginBottom: 12,
     borderWidth: 1,
@@ -866,34 +723,65 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(49,144,134,0.12)",
   },
-  vehicleModel: { fontSize: 13, fontFamily: "monsterrat_kp", color: "#1f3d38" },
+  vehicleModel: {
+    fontSize: 13,
+    fontFamily: "monsterrat_kp",
+    color: "#1f3d38",
+  },
   vehiclePlate: {
     fontSize: 11,
     fontFamily: "monster_act",
     color: "#7f9f97",
     marginTop: 2,
   },
-  vehicleStatusPill: {
-    flexDirection: "row",
+
+  // Vertical divider between vehicle and trip count
+  vehicleDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(233,240,238,0.9)",
+    marginVertical: 2,
+  },
+
+  // Trips today block on the right
+  tripsCol: {
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: "rgba(22,163,74,0.14)",
+    justifyContent: "center",
+    minWidth: 70,
+    paddingLeft: 4,
   },
-  vehicleStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#16A34A",
+  tripsValue: {
+    fontSize: 26,
+    fontFamily: "digitalFont",
+    color: "#1f3d38",
+    letterSpacing: 1,
+    lineHeight: 30,
   },
-  vehicleStatusText: {
-    fontSize: 9,
-    fontFamily: "monsterrat_font",
-    fontWeight: "700",
-    color: "#15803D",
-    letterSpacing: 0.6,
+  tripsLabel: {
+    fontSize: 10,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginTop: 2,
+    textAlign: "center",
+  },
+
+    // ---------- queue progress bar ----------
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(49,144,134,0.15)",
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
+    backgroundColor: "#319086",
+  },
+  progressHint: {
+    fontSize: 11,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
   },
 
   // ---------- bottom nav ----------

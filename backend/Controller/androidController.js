@@ -260,6 +260,295 @@ export const signup = async (req, res) => {
   }
 };
 
+// UPDATE USER (commuter)
+export const updateUser = async (req, res) => {
+  try {
+    // Accept id from URL param or body
+    const userId = req.params.id || req.body.user_id;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "user_id required" });
+    }
+
+    const {
+      email,
+      password,
+      firstName,
+      middleName,
+      lastName,
+      contactNumber,
+      profileImage,   // path / URL from upload handler
+      roleId,         // optional — usually admin-only
+    } = req.body;
+
+    // ---------- 1. Confirm user exists ----------
+    const [existing] = await db.promise().query(
+      `SELECT user_id FROM userauth WHERE user_id = ?`,
+      [userId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // ---------- 2. Email uniqueness (if changing) ----------
+    if (email) {
+      const [dupe] = await db.promise().query(
+        `SELECT user_id FROM userauth WHERE email = ? AND user_id != ?`,
+        [email, userId]
+      );
+      if (dupe.length > 0) {
+        return res.status(409).json({ success: false, message: "Email already in use" });
+      }
+    }
+
+    // ---------- 3. Build dynamic SET clauses ----------
+    const authFields = [];   // userauth table
+    const authValues = [];
+
+    if (email)  { authFields.push("email = ?");   authValues.push(email.trim().toLowerCase()); }
+    if (roleId) { authFields.push("role_id = ?"); authValues.push(roleId); }
+
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+      }
+      const hash = await bcrypt.hash(password, 10);
+      authFields.push("password = ?");
+      authValues.push(hash);
+    }
+
+    const infoFields = [];   // user_info table
+    const infoValues = [];
+
+    if (firstName     !== undefined) { infoFields.push("first_name = ?");     infoValues.push(firstName); }
+    if (middleName    !== undefined) { infoFields.push("middle_name = ?");    infoValues.push(middleName || null); }
+    if (lastName      !== undefined) { infoFields.push("last_name = ?");      infoValues.push(lastName); }
+    if (contactNumber !== undefined) { infoFields.push("contact_number = ?"); infoValues.push(contactNumber || null); }
+    if (profileImage  !== undefined) { infoFields.push("user_profile = ?");   infoValues.push(profileImage || null); }
+
+    if (authFields.length === 0 && infoFields.length === 0) {
+      return res.status(400).json({ success: false, message: "No fields to update" });
+    }
+
+    // ---------- 4. Transaction ----------
+    const connection = await db.promise().getConnection();
+    await connection.beginTransaction();
+
+    try {
+      if (authFields.length > 0) {
+        await connection.query(
+          `UPDATE userauth SET ${authFields.join(", ")} WHERE user_id = ?`,
+          [...authValues, userId]
+        );
+      }
+
+      if (infoFields.length > 0) {
+        await connection.query(
+          `UPDATE user_info SET ${infoFields.join(", ")} WHERE user_id = ?`,
+          [...infoValues, userId]
+        );
+      }
+
+      await connection.commit();
+    } catch (e) {
+      await connection.rollback();
+      throw e;
+    } finally {
+      connection.release();
+    }
+
+    // ---------- 5. Fetch and return updated profile ----------
+    const [rows] = await db.promise().query(
+      `SELECT
+         u.user_id AS id,
+         u.email,
+         r.role_name AS role,
+         ui.first_name,
+         ui.middle_name,
+         ui.last_name,
+         ui.contact_number,
+         ui.user_profile
+       FROM userauth u
+       JOIN roles r ON u.role_id = r.role_id
+       LEFT JOIN user_info ui ON u.user_id = ui.user_id
+       WHERE u.user_id = ?`,
+      [userId]
+    );
+
+    return res.json({
+      success: true,
+      message: "User updated successfully",
+      user: rows[0],
+    });
+
+  } catch (err) {
+    console.error("updateUser error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// UPDATE DRIVER
+export const updateDriver = async (req, res) => {
+  try {
+    const driverId = req.params.id || req.body.driver_id;
+    if (!driverId) {
+      return res.status(400).json({ success: false, message: "driver_id required" });
+    }
+
+    const {
+      email,
+      password,
+      firstName,
+      middleName,
+      lastName,
+      contactNumber,
+      profileImage,
+      vehicleId,
+      terminalId,
+      status,
+      roleId,
+    } = req.body;
+
+    // ---------- 0. Field-level authorization ----------
+    // Only admins can change these — they affect the driver's queue
+    // eligibility and franchise assignment.
+    const requester = req.user; // set by verifyToken
+    const isAdmin =
+      requester?.type === 'admin' ||
+      (requester?.role || '').toLowerCase().includes('admin');
+
+    const ADMIN_ONLY = ['vehicleId', 'terminalId', 'status', 'roleId'];
+    if (!isAdmin) {
+      for (const field of ADMIN_ONLY) {
+        if (req.body[field] !== undefined) {
+          return res.status(403).json({
+            success: false,
+            message: `Field "${field}" requires admin privileges`,
+          });
+        }
+      }
+    }
+
+    // ---------- 1. Confirm driver exists ----------
+    const [existing] = await db.promise().query(
+      `SELECT driver_id FROM driverauth WHERE driver_id = ?`,
+      [driverId]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
+
+    // ---------- 2. Email uniqueness ----------
+    if (email) {
+      const [dupe] = await db.promise().query(
+        `SELECT driver_id FROM driverauth WHERE email = ? AND driver_id != ?`,
+        [email, driverId]
+      );
+      if (dupe.length > 0) {
+        return res.status(409).json({ success: false, message: "Email already in use" });
+      }
+    }
+
+    // ---------- 3. Build dynamic SET clauses ----------
+    const authFields = [];
+    const authValues = [];
+
+    if (email)  { authFields.push("email = ?");   authValues.push(email.trim().toLowerCase()); }
+    if (roleId) { authFields.push("role_id = ?"); authValues.push(roleId); }
+
+    if (status) {
+      const s = String(status).toUpperCase();
+      if (!["ACTIVE", "INACTIVE"].includes(s)) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+      authFields.push("status = ?");
+      authValues.push(s);
+    }
+
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+      }
+      const hash = await bcrypt.hash(password, 10);
+      authFields.push("password = ?");
+      authValues.push(hash);
+    }
+
+    const infoFields = [];
+    const infoValues = [];
+
+    if (firstName     !== undefined) { infoFields.push("first_name = ?");     infoValues.push(firstName); }
+    if (middleName    !== undefined) { infoFields.push("middle_name = ?");    infoValues.push(middleName || null); }
+    if (lastName      !== undefined) { infoFields.push("last_name = ?");      infoValues.push(lastName); }
+    if (contactNumber !== undefined) { infoFields.push("contact_number = ?"); infoValues.push(contactNumber || null); }
+    if (profileImage  !== undefined) { infoFields.push("driver_profile = ?"); infoValues.push(profileImage || null); }
+    if (vehicleId     !== undefined) { infoFields.push("vehicle_id = ?");     infoValues.push(vehicleId || null); }
+    if (terminalId    !== undefined) { infoFields.push("terminal_id = ?");    infoValues.push(terminalId || null); }
+
+    if (authFields.length === 0 && infoFields.length === 0) {
+      return res.status(400).json({ success: false, message: "No fields to update" });
+    }
+
+    // ---------- 4. Transaction ----------
+    const connection = await db.promise().getConnection();
+    await connection.beginTransaction();
+
+    try {
+      if (authFields.length > 0) {
+        await connection.query(
+          `UPDATE driverauth SET ${authFields.join(", ")} WHERE driver_id = ?`,
+          [...authValues, driverId]
+        );
+      }
+
+      if (infoFields.length > 0) {
+        await connection.query(
+          `UPDATE driver_info SET ${infoFields.join(", ")} WHERE driver_id = ?`,
+          [...infoValues, driverId]
+        );
+      }
+
+      await connection.commit();
+    } catch (e) {
+      await connection.rollback();
+      throw e;
+    } finally {
+      connection.release();
+    }
+
+    // ---------- 5. Return updated profile ----------
+    const [rows] = await db.promise().query(
+      `SELECT
+         d.driver_id AS id,
+         d.email,
+         d.status,
+         r.role_name AS role,
+         di.first_name,
+         di.middle_name,
+         di.last_name,
+         di.contact_number,
+         di.driver_profile,
+         di.vehicle_id,
+         di.terminal_id,
+         tl.terminal_name
+       FROM driverauth d
+       JOIN roles r                    ON d.role_id       = r.role_id
+       LEFT JOIN driver_info di        ON d.driver_id     = di.driver_id
+       LEFT JOIN terminal_locations tl ON di.terminal_id  = tl.terminal_id
+       WHERE d.driver_id = ?`,
+      [driverId]
+    );
+
+    return res.json({
+      success: true,
+      message: "Driver updated successfully",
+      driver: rows[0],
+    });
+
+  } catch (err) {
+    console.error("updateDriver error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 // GET ROLES 
 export const getRoles = async (req, res) => {
   try {

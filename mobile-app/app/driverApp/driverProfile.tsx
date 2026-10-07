@@ -8,25 +8,65 @@ import {
   ImageBackground,
   Modal,
   Pressable,
-  StatusBar,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFonts } from "expo-font";
 import { router, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import GridNavButton from "../components/GridNavButton";
 import { useAuth } from "../../appContext/authContext";
 import { API_URL } from "../_layout";
 
+// Build a full URL whether the DB stores a relative path or a full URL
+function resolveAvatarUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 export default function DriverProfile() {
   const pathname = usePathname();
   const insets   = useSafeAreaInsets();
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, login } = useAuth();
 
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [tripsThisWeek, setTripsThisWeek] = useState(0);
+  const [showLogoutModal, setShowLogoutModal]   = useState(false);
+  const [showEditModal, setShowEditModal]       = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const [tripsThisWeek, setTripsThisWeek]   = useState(0);
   const [tripsThisMonth, setTripsThisMonth] = useState(0);
+
+  const [vehicle, setVehicle] = useState({
+    plate: "—",
+    model: "—",
+  });
+
+  // Avatar — held as a fully-qualified URL (or null to fall back to initials)
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
+  // ---- Edit form state ----
+  const [form, setForm] = useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    contactNumber: "",
+    email: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  // ---- Request form state ----
+  const [requestMessage, setRequestMessage] = useState("");
+  const [requestType, setRequestType] = useState<"vehicle" | "terminal">("vehicle");
 
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
@@ -49,7 +89,35 @@ export default function DriverProfile() {
     (user as any)?.id;
 
   // ============================================================
-  // Fetch weekly + monthly trip counts
+  // Hydrate avatar from the auth user
+  // ============================================================
+  useEffect(() => {
+    const stored =
+      (user as any)?.profileImage ||
+      (user as any)?.driverProfile ||
+      (user as any)?.driver_profile ||
+      null;
+    setAvatarUri(resolveAvatarUrl(stored));
+  }, [user]);
+
+  // ============================================================
+  // Prefill edit form when the modal opens
+  // ============================================================
+  useEffect(() => {
+    if (!showEditModal) return;
+    setForm({
+      firstName:     (user as any)?.firstName     || "",
+      middleName:    (user as any)?.middleName    || "",
+      lastName:      (user as any)?.lastName      || "",
+      contactNumber: (user as any)?.contactNumber || "",
+      email:         (user as any)?.email         || "",
+      newPassword:   "",
+      confirmPassword: "",
+    });
+  }, [showEditModal, user]);
+
+  // ============================================================
+  // Fetch trip stats
   // ============================================================
   useEffect(() => {
     if (!driverId) return;
@@ -80,6 +148,40 @@ export default function DriverProfile() {
     return () => { cancelled = true; };
   }, [driverId, token]);
 
+  // ============================================================
+  // Fetch vehicle info
+  // ============================================================
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/auth/driverQueue?driver_id=${driverId}`,
+          {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && json.data?.driver) {
+          setVehicle({
+            plate: json.data.driver.plate_number || "—",
+            model: json.data.driver.vehicle_type || "—",
+          });
+        }
+      } catch (e) {
+        console.warn("[driverProfile] vehicle fetch failed:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [driverId, token]);
+
   if (!fontsLoaded) return null;
 
   const displayName = user
@@ -92,16 +194,192 @@ export default function DriverProfile() {
 
   const driverId_label = user?.id ? `DRV-${String(user.id).padStart(5, "0")}` : "DRV-00000";
 
-  const vehicle = {
-    plate: "ABC 1234",
-    model: "Toyota Hiace UV Express",
-    capacity: 14,
-    status: "Active",
-  };
-
   const terminal = {
     name: user?.terminal_name || "Koronadal City Terminal",
-    id: user?.terminal_id || 1,
+    id:   user?.terminal_id   || 1,
+  };
+
+  // ============================================================
+  // Pick + upload avatar using FileSystem.uploadAsync
+  // ============================================================
+  const handlePickAvatar = async () => {
+    if (uploading) return;
+
+    try {
+      // Ask for permission
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Permission needed",
+          "Please allow access to your photos to change your profile picture."
+        );
+        return;
+      }
+
+      // Open picker — SDK 51+ uses MediaType array
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"] as ImagePicker.MediaType[],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+
+      // Optimistic preview
+      setAvatarUri(asset.uri);
+      setUploading(true);
+
+      const uploadUrl = `${API_URL}/api/auth/driver/${driverId}/avatar`;
+
+      // FileSystem.uploadAsync streams the file from disk — no Blob,
+      // no base64 roundtrip, no deprecation warning.
+      const response = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "avatar",                      // must match multer's .single("avatar")
+        mimeType: asset.mimeType || "image/jpeg",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      // Response body is plain text — parse it manually
+      let json: any = null;
+      try {
+        json = JSON.parse(response.body);
+      } catch {
+        console.warn(
+          "[driverProfile] avatar upload returned non-JSON:",
+          response.status,
+          response.body?.slice(0, 200)
+        );
+        throw new Error(
+          `Server error (${response.status}) — endpoint may not exist yet.`
+        );
+      }
+
+      if (response.status < 200 || response.status >= 300 || !json.success) {
+        throw new Error(json.message || `Upload failed (${response.status})`);
+      }
+
+      // Server returns relative path — resolve to full URL for display
+      const serverUrl = json.url ? resolveAvatarUrl(json.url) : asset.uri;
+      setAvatarUri(serverUrl);
+
+      // Persist the new avatar into the auth context so it survives restarts
+      if (login && user) {
+        await login(
+          { ...(user as any), profileImage: json.url ?? asset.uri },
+          token as string,
+          true
+        );
+      }
+    } catch (e: any) {
+      console.warn("[driverProfile] avatar upload error:", e);
+      Alert.alert("Upload failed", e?.message || "Could not upload image.");
+      // Roll back preview to whatever was previously stored
+      const stored =
+        (user as any)?.profileImage ||
+        (user as any)?.driverProfile ||
+        null;
+      setAvatarUri(resolveAvatarUrl(stored));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ============================================================
+  // Save profile (self-service fields only)
+  // ============================================================
+  const handleSaveProfile = async () => {
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      Alert.alert("Missing fields", "First name and last name are required.");
+      return;
+    }
+    if (!form.email.trim()) {
+      Alert.alert("Missing email", "Email is required.");
+      return;
+    }
+
+    if (form.newPassword || form.confirmPassword) {
+      if (form.newPassword.length < 8) {
+        Alert.alert("Password too short", "Password must be at least 8 characters.");
+        return;
+      }
+      if (form.newPassword !== form.confirmPassword) {
+        Alert.alert("Passwords don't match", "Please re-enter your new password.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const body: any = {
+        firstName:     form.firstName.trim(),
+        middleName:    form.middleName.trim() || null,
+        lastName:      form.lastName.trim(),
+        contactNumber: form.contactNumber.trim() || null,
+        email:         form.email.trim(),
+      };
+      if (form.newPassword) body.password = form.newPassword;
+
+      const res = await fetch(
+        `${API_URL}/api/auth/driver/${driverId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Failed to update profile");
+      }
+
+      if (login && json.driver) {
+        const updatedUser = {
+          ...(user as any),
+          firstName:     json.driver.first_name     ?? user?.firstName,
+          middleName:    json.driver.middle_name    ?? (user as any)?.middleName,
+          lastName:      json.driver.last_name      ?? user?.lastName,
+          contactNumber: json.driver.contact_number ?? (user as any)?.contactNumber,
+          email:         json.driver.email          ?? user?.email,
+        };
+        await login(updatedUser, token as string, true);
+      }
+
+      setShowEditModal(false);
+      Alert.alert("Success", "Your profile has been updated.");
+    } catch (e: any) {
+      Alert.alert("Update failed", e?.message || "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ============================================================
+  // Submit an admin request
+  // ============================================================
+  const handleSubmitRequest = async () => {
+    if (!requestMessage.trim()) {
+      Alert.alert("Empty request", "Please describe the change you need.");
+      return;
+    }
+    Alert.alert(
+      "Request submitted",
+      "Your request has been sent to the dispatch admin. You'll be notified once it's reviewed."
+    );
+    setShowRequestModal(false);
+    setRequestMessage("");
   };
 
   const handleLogoutConfirm = async () => {
@@ -116,7 +394,6 @@ export default function DriverProfile() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
       <ImageBackground
         source={require("../../assets/images/main-bg.png")}
         style={{ flex: 1 }}
@@ -127,20 +404,39 @@ export default function DriverProfile() {
             contentContainerStyle={styles.container}
             showsVerticalScrollIndicator={false}
           >
-            {/* ===== HEADER / IDENTITY ===== */}
+            {/* ===== IDENTITY CARD ===== */}
             <BlurView intensity={45} tint="light" style={styles.identityCard}>
-              <View style={styles.avatarWrap}>
+              {/* Tappable avatar */}
+              <TouchableOpacity
+                style={styles.avatarWrap}
+                activeOpacity={0.85}
+                onPress={handlePickAvatar}
+                disabled={uploading}
+              >
                 <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{initials}</Text>
+                  {avatarUri ? (
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <Text style={styles.avatarText}>{initials}</Text>
+                  )}
                 </View>
+
+                {/* Camera badge / spinner overlay */}
                 <View style={styles.avatarBadge}>
-                  <MaterialCommunityIcons
-                    name="check-decagram"
-                    size={14}
-                    color="#fff"
-                  />
+                  {uploading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="camera"
+                      size={12}
+                      color="#fff"
+                    />
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <Text style={styles.name} numberOfLines={1}>
                 {displayName}
@@ -151,11 +447,7 @@ export default function DriverProfile() {
               </Text>
 
               <View style={styles.rolePill}>
-                <MaterialCommunityIcons
-                  name="car"
-                  size={11}
-                  color="#319086"
-                />
+                <MaterialCommunityIcons name="car" size={11} color="#319086" />
                 <Text style={styles.roleText}>DRIVER PARTNER</Text>
               </View>
 
@@ -167,18 +459,27 @@ export default function DriverProfile() {
                 />
                 <Text style={styles.idText}>{driverId_label}</Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.editBtn}
+                activeOpacity={0.85}
+                onPress={() => setShowEditModal(true)}
+              >
+                <MaterialCommunityIcons
+                  name="pencil-outline"
+                  size={14}
+                  color="#319086"
+                />
+                <Text style={styles.editBtnText}>Edit Profile</Text>
+              </TouchableOpacity>
             </BlurView>
 
-            {/* ===== PERFORMANCE SUMMARY ===== */}
+            {/* ===== PERFORMANCE ===== */}
             <Text style={styles.sectionLabel}>PERFORMANCE</Text>
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
                 <View style={styles.statIconWrap}>
-                  <MaterialCommunityIcons
-                    name="car"
-                    size={18}
-                    color="#319086"
-                  />
+                  <MaterialCommunityIcons name="car" size={18} color="#319086" />
                 </View>
                 <Text style={styles.statValue}>{tripsThisWeek}</Text>
                 <Text style={styles.statLabel}>TRIPS THIS WEEK</Text>
@@ -202,35 +503,12 @@ export default function DriverProfile() {
                 <Text style={styles.statValue}>{tripsThisMonth}</Text>
                 <Text style={styles.statLabel}>TRIPS THIS MONTH</Text>
               </View>
-
-              <View style={styles.statDivider} />
-
-              <View style={styles.statCard}>
-                <View
-                  style={[
-                    styles.statIconWrap,
-                    { backgroundColor: "rgba(217,119,6,0.12)" },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name="star"
-                    size={18}
-                    color="#D97706"
-                  />
-                </View>
-                <Text style={styles.statValue}>4.8</Text>
-                <Text style={styles.statLabel}>RATING</Text>
-              </View>
             </View>
 
             {/* ===== ACCOUNT INFO ===== */}
             <Text style={styles.sectionLabel}>ACCOUNT INFORMATION</Text>
             <BlurView intensity={40} tint="light" style={styles.card}>
-              <InfoRow
-                icon="account-outline"
-                label="Full Name"
-                value={displayName}
-              />
+              <InfoRow icon="account-outline" label="Full Name" value={displayName} />
               <Divider />
               <InfoRow
                 icon="email-outline"
@@ -251,8 +529,18 @@ export default function DriverProfile() {
               />
             </BlurView>
 
-            {/* ===== TERMINAL ASSIGNMENT ===== */}
-            <Text style={styles.sectionLabel}>TERMINAL ASSIGNMENT</Text>
+            {/* ===== TERMINAL ===== */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>TERMINAL ASSIGNMENT</Text>
+              <View style={styles.lockedPill}>
+                <MaterialCommunityIcons
+                  name="lock-outline"
+                  size={10}
+                  color="#7f9f97"
+                />
+                <Text style={styles.lockedPillText}>Admin-managed</Text>
+              </View>
+            </View>
             <BlurView intensity={40} tint="light" style={styles.card}>
               <View style={styles.terminalRow}>
                 <View style={styles.terminalIconWrap}>
@@ -272,10 +560,43 @@ export default function DriverProfile() {
                   </Text>
                 </View>
               </View>
+
+              <View style={styles.vehicleDivider} />
+
+              <TouchableOpacity
+                style={styles.requestRow}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setRequestType("terminal");
+                  setShowRequestModal(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="message-alert-outline"
+                  size={14}
+                  color="#319086"
+                />
+                <Text style={styles.requestText}>Request terminal change</Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={16}
+                  color="#7f9f97"
+                />
+              </TouchableOpacity>
             </BlurView>
 
             {/* ===== VEHICLE ===== */}
-            <Text style={styles.sectionLabel}>VEHICLE</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>VEHICLE</Text>
+              <View style={styles.lockedPill}>
+                <MaterialCommunityIcons
+                  name="lock-outline"
+                  size={10}
+                  color="#7f9f97"
+                />
+                <Text style={styles.lockedPillText}>Admin-managed</Text>
+              </View>
+            </View>
             <BlurView intensity={40} tint="light" style={styles.card}>
               <View style={styles.vehicleTop}>
                 <View style={styles.vehicleIconWrap}>
@@ -289,13 +610,11 @@ export default function DriverProfile() {
                   <Text style={styles.vehicleModel} numberOfLines={1}>
                     {vehicle.model}
                   </Text>
-                  <Text style={styles.vehiclePlate}>
-                    {vehicle.plate} • {vehicle.capacity} seats
-                  </Text>
+                  <Text style={styles.vehiclePlate}>{vehicle.plate}</Text>
                 </View>
                 <View style={styles.vehicleStatusPill}>
                   <View style={styles.vehicleStatusDot} />
-                  <Text style={styles.vehicleStatusText}>{vehicle.status}</Text>
+                  <Text style={styles.vehicleStatusText}>Active</Text>
                 </View>
               </View>
 
@@ -306,10 +625,8 @@ export default function DriverProfile() {
                 <Text style={styles.vehicleRowValue}>{vehicle.plate}</Text>
               </View>
               <View style={styles.vehicleRow}>
-                <Text style={styles.vehicleRowLabel}>Capacity</Text>
-                <Text style={styles.vehicleRowValue}>
-                  {vehicle.capacity} passengers
-                </Text>
+                <Text style={styles.vehicleRowLabel}>Vehicle Type</Text>
+                <Text style={styles.vehicleRowValue}>{vehicle.model}</Text>
               </View>
               <View style={styles.vehicleRow}>
                 <Text style={styles.vehicleRowLabel}>Franchise Status</Text>
@@ -317,34 +634,29 @@ export default function DriverProfile() {
                   Valid
                 </Text>
               </View>
-            </BlurView>
 
-            {/* ===== SETTINGS ===== */}
-            <Text style={styles.sectionLabel}>SETTINGS</Text>
-            <BlurView intensity={40} tint="light" style={styles.card}>
-              <ActionRow
-                icon="lock-outline"
-                label="Change Password"
-                onPress={() => {}}
-              />
-              <Divider />
-              <ActionRow
-                icon="bell-outline"
-                label="Notification Preferences"
-                onPress={() => {}}
-              />
-              <Divider />
-              <ActionRow
-                icon="help-circle-outline"
-                label="Help & Support"
-                onPress={() => {}}
-              />
-              <Divider />
-              <ActionRow
-                icon="information-outline"
-                label="App Version"
-                value="1.0.0"
-              />
+              <View style={styles.vehicleDivider} />
+
+              <TouchableOpacity
+                style={styles.requestRow}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setRequestType("vehicle");
+                  setShowRequestModal(true);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="message-alert-outline"
+                  size={14}
+                  color="#319086"
+                />
+                <Text style={styles.requestText}>Request vehicle change</Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={16}
+                  color="#7f9f97"
+                />
+              </TouchableOpacity>
             </BlurView>
 
             {/* ===== LOGOUT ===== */}
@@ -363,12 +675,7 @@ export default function DriverProfile() {
           </ScrollView>
 
           {/* ===== BOTTOM NAV ===== */}
-          <View
-            style={[
-              styles.row,
-              { bottom: navBottomOffset },
-            ]}
-          >
+          <View style={[styles.row, { bottom: navBottomOffset }]}>
             <GridNavButton
               title="Dashboard"
               route="./driverDashboard"
@@ -396,7 +703,195 @@ export default function DriverProfile() {
           </View>
         </View>
 
-        {/* ===== LOGOUT CONFIRMATION MODAL ===== */}
+        {/* ===== EDIT PROFILE MODAL ===== */}
+        <Modal
+          visible={showEditModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowEditModal(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setShowEditModal(false)}
+          >
+            <Pressable
+              style={styles.editModalCard}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ScrollView
+                contentContainerStyle={styles.editModalBody}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.editModalIconWrap}>
+                  <MaterialCommunityIcons
+                    name="account-edit-outline"
+                    size={24}
+                    color="#319086"
+                  />
+                </View>
+
+                <Text style={styles.editModalTitle}>Edit Profile</Text>
+                <Text style={styles.editModalSubtitle}>
+                  Update your personal information
+                </Text>
+
+                <Field
+                  label="First Name"
+                  icon="account-outline"
+                  value={form.firstName}
+                  onChangeText={(v) => setForm((f) => ({ ...f, firstName: v }))}
+                />
+                <Field
+                  label="Middle Name"
+                  icon="account-outline"
+                  value={form.middleName}
+                  onChangeText={(v) => setForm((f) => ({ ...f, middleName: v }))}
+                  optional
+                />
+                <Field
+                  label="Last Name"
+                  icon="account-outline"
+                  value={form.lastName}
+                  onChangeText={(v) => setForm((f) => ({ ...f, lastName: v }))}
+                />
+                <Field
+                  label="Contact Number"
+                  icon="phone-outline"
+                  value={form.contactNumber}
+                  onChangeText={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
+                  keyboardType="phone-pad"
+                  optional
+                />
+                <Field
+                  label="Email Address"
+                  icon="email-outline"
+                  value={form.email}
+                  onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+
+                <View style={styles.editDivider} />
+
+                <Text style={styles.editSectionLabel}>
+                  CHANGE PASSWORD (OPTIONAL)
+                </Text>
+
+                <Field
+                  label="New Password"
+                  icon="lock-outline"
+                  value={form.newPassword}
+                  onChangeText={(v) => setForm((f) => ({ ...f, newPassword: v }))}
+                  secureTextEntry
+                  placeholder="Leave empty to keep current"
+                />
+                <Field
+                  label="Confirm Password"
+                  icon="lock-outline"
+                  value={form.confirmPassword}
+                  onChangeText={(v) => setForm((f) => ({ ...f, confirmPassword: v }))}
+                  secureTextEntry
+                  placeholder="Re-enter new password"
+                />
+              </ScrollView>
+
+              <View style={styles.editModalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalCancelBtn]}
+                  onPress={() => setShowEditModal(false)}
+                  activeOpacity={0.85}
+                  disabled={saving}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalBtn,
+                    styles.modalConfirmBtn,
+                    saving && { opacity: 0.6 },
+                  ]}
+                  onPress={handleSaveProfile}
+                  activeOpacity={0.85}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.modalConfirmText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* ===== ADMIN REQUEST MODAL ===== */}
+        <Modal
+          visible={showRequestModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowRequestModal(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setShowRequestModal(false)}
+          >
+            <Pressable
+              style={styles.modalCard}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={styles.modalIconWrap}>
+                <MaterialCommunityIcons
+                  name="message-alert-outline"
+                  size={26}
+                  color="#319086"
+                />
+              </View>
+
+              <Text style={[styles.modalTitle, { color: "#1f6f66" }]}>
+                Request {requestType} change
+              </Text>
+              <Text style={styles.modalMessage}>
+                {requestType === "vehicle"
+                  ? "Tell the admin why you need a different vehicle and what plate/type you should be assigned."
+                  : "Tell the admin why you need to move to a different terminal."}
+              </Text>
+
+              <TextInput
+                style={styles.requestInput}
+                value={requestMessage}
+                onChangeText={setRequestMessage}
+                placeholder="Describe your request…"
+                placeholderTextColor="#b5c4c0"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalCancelBtn]}
+                  onPress={() => setShowRequestModal(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.requestSubmitBtn]}
+                  onPress={handleSubmitRequest}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalConfirmText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* ===== LOGOUT MODAL ===== */}
         <Modal
           visible={showLogoutModal}
           transparent
@@ -446,8 +941,58 @@ export default function DriverProfile() {
 }
 
 // ============================================================
-// Reusable rows
+// Field + row helpers
 // ============================================================
+function Field({
+  label,
+  icon,
+  value,
+  onChangeText,
+  secureTextEntry,
+  keyboardType,
+  autoCapitalize,
+  placeholder,
+  optional,
+}: {
+  label: string;
+  icon: any;
+  value: string;
+  onChangeText: (v: string) => void;
+  secureTextEntry?: boolean;
+  keyboardType?: any;
+  autoCapitalize?: any;
+  placeholder?: string;
+  optional?: boolean;
+}) {
+  return (
+    <View style={styles.fieldWrap}>
+      <Text style={styles.fieldLabel}>
+        {label}
+        {optional ? <Text style={styles.fieldOptional}>  · optional</Text> : null}
+      </Text>
+      <View style={styles.fieldInputWrap}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={16}
+          color="#7f9f97"
+          style={styles.fieldIcon}
+        />
+        <TextInput
+          style={styles.fieldInput}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#b5c4c0"
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize ?? "words"}
+          autoCorrect={false}
+        />
+      </View>
+    </View>
+  );
+}
+
 function InfoRow({
   icon,
   label,
@@ -469,43 +1014,6 @@ function InfoRow({
         </Text>
       </View>
     </View>
-  );
-}
-
-function ActionRow({
-  icon,
-  label,
-  value,
-  onPress,
-}: {
-  icon: any;
-  label: string;
-  value?: string;
-  onPress?: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.infoRow}
-      onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
-      disabled={!onPress}
-    >
-      <View style={styles.infoIconWrap}>
-        <MaterialCommunityIcons name={icon} size={16} color="#319086" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.infoValue}>{label}</Text>
-      </View>
-      {value ? (
-        <Text style={styles.actionValue}>{value}</Text>
-      ) : (
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={18}
-          color="#7f9f97"
-        />
-      )}
-    </TouchableOpacity>
   );
 }
 
@@ -548,6 +1056,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 3,
     borderColor: "rgba(255,255,255,0.7)",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   avatarText: {
     color: "#fff",
@@ -599,14 +1112,40 @@ const styles = StyleSheet.create({
     color: "#319086",
     letterSpacing: 1,
   },
-  idRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  idRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 14 },
   idText: {
     fontSize: 11,
     fontFamily: "digitalFont",
     color: "#7f9f97",
     letterSpacing: 1,
   },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(49,144,134,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(49,144,134,0.28)",
+  },
+  editBtnText: {
+    fontSize: 12,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#319086",
+    letterSpacing: 0.3,
+  },
 
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    marginLeft: 4,
+    marginTop: 6,
+  },
   sectionLabel: {
     fontSize: 10,
     fontFamily: "monsterrat_font",
@@ -616,6 +1155,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 4,
     marginTop: 6,
+  },
+  lockedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: "rgba(127,159,151,0.10)",
+  },
+  lockedPillText: {
+    fontSize: 9,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#7f9f97",
+    letterSpacing: 0.4,
   },
 
   statsRow: {
@@ -694,11 +1249,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "monster_act",
     color: "#1f3d38",
-  },
-  actionValue: {
-    fontSize: 12,
-    fontFamily: "digitalFont",
-    color: "#7f9f97",
   },
   divider: {
     height: 0.6,
@@ -811,6 +1361,21 @@ const styles = StyleSheet.create({
     color: "#1f3d38",
   },
 
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  requestText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "monsterrat_font",
+    fontWeight: "600",
+    color: "#319086",
+  },
+
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -844,7 +1409,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 30, 28, 0.4)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   modalCard: {
     width: "100%",
@@ -858,6 +1423,106 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.8)",
   },
+
+  editModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "85%",
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.8)",
+    overflow: "hidden",
+  },
+  editModalBody: {
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+  editModalIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(49,144,134,0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(49,144,134,0.28)",
+    marginBottom: 12,
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontFamily: "monsterrat_kp",
+    color: "#1f6f66",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  editModalSubtitle: {
+    fontSize: 12,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+
+  fieldWrap: { marginBottom: 14 },
+  fieldLabel: {
+    fontSize: 10,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#7f9f97",
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginLeft: 2,
+  },
+  fieldOptional: {
+    fontFamily: "monster_act",
+    fontWeight: "400",
+    color: "#b5c4c0",
+  },
+  fieldInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.65)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(49,144,134,0.22)",
+    paddingHorizontal: 12,
+  },
+  fieldIcon: { marginRight: 8 },
+  fieldInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontFamily: "monster_act",
+    fontSize: 13,
+    color: "#1f3d38",
+  },
+
+  editDivider: {
+    height: 0.6,
+    backgroundColor: "rgba(233,240,238,0.9)",
+    marginVertical: 14,
+  },
+  editSectionLabel: {
+    fontSize: 10,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#7f9f97",
+    letterSpacing: 1.2,
+    marginBottom: 12,
+    marginLeft: 2,
+  },
+  editModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+    borderTopWidth: 0.6,
+    borderTopColor: "rgba(233,240,238,0.9)",
+    backgroundColor: "rgba(255,255,255,0.5)",
+  },
+
   modalIconWrap: {
     width: 58,
     height: 58,
@@ -895,7 +1560,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(127,159,151,0.3)",
   },
-  modalConfirmBtn: { backgroundColor: "#e74c3c" },
+  modalConfirmBtn: { backgroundColor: "#319086" },
+  requestSubmitBtn: { backgroundColor: "#319086" },
   modalCancelText: {
     color: "#4a5f5a",
     fontSize: 13,
@@ -907,6 +1573,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "monsterrat_font",
     fontWeight: "700",
+  },
+
+  requestInput: {
+    width: "100%",
+    minHeight: 90,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(49,144,134,0.22)",
+    backgroundColor: "rgba(255,255,255,0.65)",
+    fontFamily: "monster_act",
+    fontSize: 13,
+    color: "#1f3d38",
+    marginBottom: 20,
   },
 
   row: {
