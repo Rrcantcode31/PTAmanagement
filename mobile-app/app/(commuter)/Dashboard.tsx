@@ -818,7 +818,7 @@ export default function Dashboard() {
               </View>
             )}
           </View>
-          
+
           <View
             style={[
               styles.navRow,
@@ -915,10 +915,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   welcome: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "monsterrat_kp",
-    color: "#1e2a3a",
-    fontWeight: "700",
+    color: '#1f6f66',
+    marginBottom: 2,
   },
   greeting: {
     flex: 1,

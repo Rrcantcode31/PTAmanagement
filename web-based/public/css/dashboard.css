@@ -1043,3 +1043,129 @@
         justify-content: center;
     }
 }
+/* ============================================================
+   MAP HEADER — title + inline legend with descriptions
+   ============================================================ */
+.map-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.map-header-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.map-header-left h2 {
+  margin: 0 0 3px 0;
+}
+
+.map-header-left p {
+  margin: 0;
+}
+
+/* Horizontal legend bar */
+.map-header-legend {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  background: #f7fbfa;
+  border: 1px solid #e2efec;
+  border-radius: 14px;
+  max-width: 560px;
+}
+
+.map-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.map-legend-divider {
+  width: 1px;
+  background: #e2efec;
+  align-self: stretch;
+  margin: 2px 0;
+  flex: 0 0 1px;
+}
+
+.map-legend-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.map-legend-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: 'Montserrat', sans-serif;
+  color: #1f3d38;
+  white-space: nowrap;
+}
+
+.map-legend-sub {
+  font-size: 10px;
+  font-family: 'Montserrat', sans-serif;
+  color: #6b7b7e;
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+/* Icons */
+.map-legend-pin {
+  color: #e74c3c;
+  font-size: 14px;
+  line-height: 1;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.map-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2a7be4;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1.5px #2a7be4;
+  flex: 0 0 10px;
+  margin-top: 3px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 780px) {
+  .map-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .map-header-legend {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-header-legend {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .map-legend-divider {
+    width: auto;
+    height: 1px;
+    align-self: auto;
+    margin: 0;
+  }
+
+  .map-legend-title,
+  .map-legend-sub {
+    white-space: normal;
+  }
+}

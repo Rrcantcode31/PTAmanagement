@@ -1,7 +1,7 @@
 import express from 'express';
 import 
 { signup, login, getRoles, 
-GetAllTerminalLocations, getFarePrices, getDriverInfo, getDriverQueue, 
+GetAllTerminalLocations, getFarePrices, getDriverQueue, 
 getTerminalQueue, getNearbyTerminals, getTripEstimate, getDriverStats} from '../Controller/androidController.js';
 
 import { verifyToken, requireType, } from '../middleware/authMiddleware.js'

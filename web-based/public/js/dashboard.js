@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         radius: 6,
         color: '#fafafb',
         weight: 2,
-        fillColor: '#ff0000',
+        fillColor: '#0d00ff',
         fillOpacity: 1
       });
     }

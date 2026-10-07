@@ -207,7 +207,9 @@ export default function Mapping() {
   // ============================================================
   // Responsive layout values
   // ============================================================
-  const topOffset = Math.max(insets.top, 8) + 4;
+  // SafeAreaView already handles the top inset, so we just add
+  // a few px of breathing room — no need to re-add insets.top.
+  const topOffset = 4;
 
   const navHeight       = 56;
   const navGap          = 12;
@@ -267,11 +269,9 @@ export default function Mapping() {
       }
     };
 
-    // Reset filter when the terminal changes
     setTypeFilter("all");
 
     load();
-    // Refresh every 15s so the ETA countdown stays roughly accurate
     const timer = setInterval(load, 15000);
 
     return () => {
@@ -400,16 +400,24 @@ export default function Mapping() {
                 key={q.queue_id}
                 style={[styles.queuePill, isFirst && styles.queuePillFirst]}
               >
-                {/* Position */}
+                {/* Position — top-aligned with plate */}
                 <View style={[styles.queuePos, isFirst && styles.queuePosFirst]}>
                   <Text style={styles.queuePosText}>#{q.queue_position}</Text>
                 </View>
 
-                {/* Plate + status */}
+                {/* Plate + vehicle type (same line) + status below */}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.plate} numberOfLines={1}>
-                    {q.plate_number || "—"}
-                  </Text>
+                  <View style={styles.plateRow}>
+                    <Text style={styles.plate} numberOfLines={1}>
+                      {q.plate_number || "—"}
+                    </Text>
+                    {!!q.vehicle_type && (
+                      <Text style={styles.vehicleType} numberOfLines={1}>
+                        {q.vehicle_type}
+                      </Text>
+                    )}
+                  </View>
+
                   <View
                     style={[
                       styles.statusPill,
@@ -429,7 +437,7 @@ export default function Mapping() {
                   </View>
                 </View>
 
-                {/* ETA */}
+                {/* ETA — top-aligned with plate */}
                 <View style={styles.etaCol}>
                   <Text style={styles.etaLabel}>Departs</Text>
                   <Text
@@ -509,7 +517,7 @@ export default function Mapping() {
                 activeOpacity={0.75}
               >
                 <Text style={styles.selectBtnText} numberOfLines={1}>
-                  {selected ? selected.terminal_name : "Select terminal"}
+                  {selected ? selected.terminal_name : "Select route"}
                 </Text>
                 <Ionicons name="chevron-down" size={14} color="#1f6f66" />
               </TouchableOpacity>
@@ -551,7 +559,7 @@ export default function Mapping() {
               <View style={styles.queuePanelContent}>
                 <View style={styles.stateBox}>
                   <Ionicons name="location-outline" size={26} color="#7f9f97" />
-                  <Text style={styles.stateText}>Please select terminal</Text>
+                  <Text style={styles.stateText}>Please select route</Text>
                 </View>
                 <View style={styles.handleWrap}>
                   <View style={styles.handle} />
@@ -589,7 +597,7 @@ export default function Mapping() {
           onPress={() => setDropdownOpen(false)}
         >
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Select terminal</Text>
+            <Text style={styles.modalTitle}>Select route</Text>
             <FlatList
               data={terminals}
               keyExtractor={(t) => String(t.terminal_id)}
@@ -625,8 +633,8 @@ export default function Mapping() {
 // Styles
 // ============================================================
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#e9efe9" },
-  root: { flex: 1, backgroundColor: "#e9efe9" },
+  safeArea: { flex: 1 },
+  root: { flex: 1 },
 
   topOverlay: {
     position: "absolute",
@@ -657,10 +665,10 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "monsterrat_kp",
-    color: "#1a1a1a",
-    flexShrink: 0,
+    color: '#1f6f66',
+    marginBottom: 2,
   },
 
   selectBtn: {
@@ -757,7 +765,7 @@ const styles = StyleSheet.create({
   // ---------- Queue rows ----------
   queuePill: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",         // top-align badge / plate / ETA
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderRadius: 14,
     borderWidth: 1,
@@ -777,6 +785,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     minWidth: 34,
     alignItems: "center",
+    marginTop: 1,                     // small nudge to align with plate
   },
   queuePosFirst: { backgroundColor: "#D85A30" },
   queuePosText: {
@@ -786,13 +795,26 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
-  // ---------- Plate ----------
+  // ---------- Plate + vehicle type ----------
+  plateRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 6,
+    flexShrink: 1,
+  },
   plate: {
     fontSize: 14,
     fontFamily: "digitalFont",
     color: "#1a1a1a",
     letterSpacing: 0.6,
-    marginBottom: 4,
+    flexShrink: 0,
+  },
+  vehicleType: {
+    fontSize: 10,
+    fontFamily: "monster_act",
+    color: "#5c7e76",
+    flexShrink: 1,
   },
 
   // ---------- Status pill ----------
@@ -818,6 +840,7 @@ const styles = StyleSheet.create({
   etaCol: {
     alignItems: "flex-end",
     minWidth: 88,
+    paddingTop: 3,
   },
   etaLabel: {
     fontSize: 9,

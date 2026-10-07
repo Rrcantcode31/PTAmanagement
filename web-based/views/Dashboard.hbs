@@ -121,11 +121,40 @@
 
       <section class="map-section">
     <div class="map-card">
-        <h2>South Cotabato Terminals-map</h2>
-        <p>Visual map of terminal locations across South Cotabato</p>
+
+        <!-- Header row: title on the left, legend on the right -->
+        <div class="map-header">
+
+            <div class="map-header-left">
+                <h2>South Cotabato Terminals-map</h2>
+                <p>Visual map of terminal locations across South Cotabato</p>
+            </div>
+
+            <div class="map-header-legend">
+                <div class="map-legend-item">
+                    <span class="map-legend-icon map-legend-pin">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </span>
+                    <div class="map-legend-text">
+                        <span class="map-legend-title">Koronadal City Public Terminal</span>
+                        <span class="map-legend-sub">Main hub — all routes originate here</span>
+                    </div>
+                </div>
+
+                <div class="map-legend-item">
+                    <span class="map-legend-icon map-legend-dot"></span>
+                    <div class="map-legend-text">
+                        <span class="map-legend-title">Co-terminals</span>
+                        <span class="map-legend-sub">Terminals with routes into the hub</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
         <div id="map"></div>
     </div>
-    </section>
+</section>
 
     </main>
   </div>

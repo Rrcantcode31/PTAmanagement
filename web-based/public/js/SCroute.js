@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const terminals = data.terminals || [];
       terminalsData = terminals;
 
-      terminalSelect.innerHTML = '<option value="">Select terminal</option>';
+      terminalSelect.innerHTML = '<option value="">Select route</option>';
 
       terminals.forEach(term => {
         if (term.terminal_name !== "Koronadal City") {
