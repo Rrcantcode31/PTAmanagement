@@ -1,7 +1,7 @@
 import express from 'express';
 import 
 { signup, login, getRoles, 
-GetAllTerminalLocations, getFarePrices, getDriverQueue, getDriverDepartures,
+GetAllTerminalLocations, getFarePrices, getDriverQueue, getDriverDepartures, updateUserAvatar,  
 getTerminalQueue, getNearbyTerminals, getTripEstimate, getDriverStats,  updateUser, updateDriver, updateDriverAvatar} from '../Controller/androidController.js';
 import { uploadAvatar } from "../middleware/upload.js";
 import { verifyToken, requireType,  requireSelfOrAdmin } from '../middleware/authMiddleware.js'
@@ -24,7 +24,15 @@ router.get("/driverStats", verifyToken, requireType('driver'), getDriverStats);
 router.get("/driverDepartures", verifyToken, requireType('driver', 'admin'), getDriverDepartures);
 
 //PUT data response
-router.put("/user/:id",verifyToken ,updateUser);
+router.put("/user/:id", verifyToken, requireSelfOrAdmin((req) => Number(req.params.id)),
+  updateUser
+);
+
+// NEW: commuter avatar upload endpoint
+router.put("/user/:id/avatar", verifyToken, requireSelfOrAdmin((req) => Number(req.params.id)),
+  uploadAvatar.single("avatar"),
+  updateUserAvatar
+);
 
 router.put("/driver/:id", verifyToken, requireType( 'driver', 'admin'),
   requireSelfOrAdmin((req) => Number(req.params.id)),

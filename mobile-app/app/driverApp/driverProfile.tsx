@@ -31,14 +31,81 @@ function resolveAvatarUrl(path?: string | null): string | null {
   return `${API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+// ============================================================
+// Validation helpers
+// ============================================================
+const CONTACT_DIGITS = 11;
+const GMAIL_DOMAIN = "gmail.com";
+
+/** Common Gmail misspellings so we can say "did you mean...?" */
+const GMAIL_TYPOS = [
+  "gmial.com", "gmai.com", "gmal.com", "gamil.com", "gnail.com",
+  "gmaill.com", "gmail.co", "gmail.con", "gmail.comm", "gmailcom",
+  "gmail.cm", "gmail.om", "gmail.com.ph", "gmail.co.uk",
+];
+
+/** Strips everything that isn't a digit and hard-stops at 11 digits. */
+function sanitizeContactNumber(raw: string): string {
+  return (raw || "").replace(/[^0-9]/g, "").slice(0, CONTACT_DIGITS);
+}
+
+function validateContactNumber(raw: string): string | null {
+  const value = (raw || "").trim();
+  if (!value) return null; // optional field
+
+  if (!/^\d+$/.test(value)) return "Contact number must contain digits only.";
+  if (value.length !== CONTACT_DIGITS) {
+    return `Contact number must be exactly ${CONTACT_DIGITS} digits.`;
+  }
+  return null;
+}
+
+function validateEmail(raw: string): string | null {
+  const email = (raw || "").trim();
+
+  if (!email) return "Email is required.";
+  if (/\s/.test(email)) return "Email cannot contain spaces.";
+  if (email.includes("..")) return "Email cannot contain two dots in a row.";
+
+  const atCount = (email.match(/@/g) || []).length;
+  if (atCount === 0) return "Email is incomplete — it must end with @gmail.com.";
+  if (atCount > 1) return "Email can only contain one @ symbol.";
+
+  const [localPart, domainPart] = email.split("@");
+
+  if (!localPart) return "Enter your username before @gmail.com.";
+  if (!domainPart) return "Email is incomplete — add gmail.com after the @.";
+
+  const local = localPart;
+  const domain = domainPart.toLowerCase().replace(/\.+$/, ""); // ignore trailing dot
+
+  if (domain !== GMAIL_DOMAIN) {
+    if (
+      GMAIL_TYPOS.includes(domain) ||
+      domain.includes("gmail") ||
+      domain.startsWith("gmai") ||
+      domain.startsWith("gmal")
+    ) {
+      return "Did you mean @gmail.com? Please check the spelling.";
+    }
+    return "Only @gmail.com email addresses are accepted.";
+  }
+
+  // Gmail usernames: letters, digits, dots; must start & end alphanumeric
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?$/.test(local)) {
+    return "That Gmail username is not valid.";
+  }
+
+  return null;
+}
+
 export default function DriverProfile() {
   const pathname = usePathname();
   const insets   = useSafeAreaInsets();
   const { user, token, logout, login } = useAuth();
 
-  const [showLogoutModal, setShowLogoutModal]   = useState(false);
-  const [showEditModal, setShowEditModal]       = useState(false);
-  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showEditModal, setShowEditModal]     = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -53,6 +120,12 @@ export default function DriverProfile() {
   // Avatar — held as a fully-qualified URL (or null to fall back to initials)
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
+  // Inline field errors
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    contactNumber?: string;
+  }>({});
+
   // ---- Edit form state ----
   const [form, setForm] = useState({
     firstName: "",
@@ -63,10 +136,6 @@ export default function DriverProfile() {
     newPassword: "",
     confirmPassword: "",
   });
-
-  // ---- Request form state ----
-  const [requestMessage, setRequestMessage] = useState("");
-  const [requestType, setRequestType] = useState<"vehicle" | "terminal">("vehicle");
 
   const [fontsLoaded] = useFonts({
     monsterrat_kp: require("../../assets/Font/monsterrat_kp.ttf"),
@@ -109,11 +178,12 @@ export default function DriverProfile() {
       firstName:     (user as any)?.firstName     || "",
       middleName:    (user as any)?.middleName    || "",
       lastName:      (user as any)?.lastName      || "",
-      contactNumber: (user as any)?.contactNumber || "",
+      contactNumber: sanitizeContactNumber((user as any)?.contactNumber || ""),
       email:         (user as any)?.email         || "",
       newPassword:   "",
       confirmPassword: "",
     });
+    setFieldErrors({});
   }, [showEditModal, user]);
 
   // ============================================================
@@ -300,10 +370,22 @@ export default function DriverProfile() {
       Alert.alert("Missing fields", "First name and last name are required.");
       return;
     }
-    if (!form.email.trim()) {
-      Alert.alert("Missing email", "Email is required.");
+
+    const emailError   = validateEmail(form.email);
+    const contactError = validateContactNumber(form.contactNumber);
+
+    if (emailError || contactError) {
+      setFieldErrors({
+        email: emailError || undefined,
+        contactNumber: contactError || undefined,
+      });
+      Alert.alert(
+        "Please check your details",
+        emailError || contactError || "Some fields are invalid."
+      );
       return;
     }
+    setFieldErrors({});
 
     if (form.newPassword || form.confirmPassword) {
       if (form.newPassword.length < 8) {
@@ -323,7 +405,7 @@ export default function DriverProfile() {
         middleName:    form.middleName.trim() || null,
         lastName:      form.lastName.trim(),
         contactNumber: form.contactNumber.trim() || null,
-        email:         form.email.trim(),
+        email:         form.email.trim().toLowerCase(),
       };
       if (form.newPassword) body.password = form.newPassword;
 
@@ -364,22 +446,6 @@ export default function DriverProfile() {
     } finally {
       setSaving(false);
     }
-  };
-
-  // ============================================================
-  // Submit an admin request
-  // ============================================================
-  const handleSubmitRequest = async () => {
-    if (!requestMessage.trim()) {
-      Alert.alert("Empty request", "Please describe the change you need.");
-      return;
-    }
-    Alert.alert(
-      "Request submitted",
-      "Your request has been sent to the dispatch admin. You'll be notified once it's reviewed."
-    );
-    setShowRequestModal(false);
-    setRequestMessage("");
   };
 
   const handleLogoutConfirm = async () => {
@@ -560,29 +626,6 @@ export default function DriverProfile() {
                   </Text>
                 </View>
               </View>
-
-              <View style={styles.vehicleDivider} />
-
-              <TouchableOpacity
-                style={styles.requestRow}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setRequestType("terminal");
-                  setShowRequestModal(true);
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="message-alert-outline"
-                  size={14}
-                  color="#319086"
-                />
-                <Text style={styles.requestText}>Request terminal change</Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={16}
-                  color="#7f9f97"
-                />
-              </TouchableOpacity>
             </BlurView>
 
             {/* ===== VEHICLE ===== */}
@@ -634,29 +677,6 @@ export default function DriverProfile() {
                   Valid
                 </Text>
               </View>
-
-              <View style={styles.vehicleDivider} />
-
-              <TouchableOpacity
-                style={styles.requestRow}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setRequestType("vehicle");
-                  setShowRequestModal(true);
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="message-alert-outline"
-                  size={14}
-                  color="#319086"
-                />
-                <Text style={styles.requestText}>Request vehicle change</Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={16}
-                  color="#7f9f97"
-                />
-              </TouchableOpacity>
             </BlurView>
 
             {/* ===== LOGOUT ===== */}
@@ -759,17 +779,51 @@ export default function DriverProfile() {
                   label="Contact Number"
                   icon="phone-outline"
                   value={form.contactNumber}
-                  onChangeText={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
+                  onChangeText={(v) => {
+                    setForm((f) => ({
+                      ...f,
+                      contactNumber: sanitizeContactNumber(v),
+                    }));
+                    if (fieldErrors.contactNumber) {
+                      setFieldErrors((e) => ({ ...e, contactNumber: undefined }));
+                    }
+                  }}
+                  onBlur={() =>
+                    setFieldErrors((e) => ({
+                      ...e,
+                      contactNumber:
+                        validateContactNumber(form.contactNumber) || undefined,
+                    }))
+                  }
                   keyboardType="phone-pad"
                   optional
+                  helper={
+                    form.contactNumber.length
+                      ? `${form.contactNumber.length}/${CONTACT_DIGITS} digits`
+                      : `${CONTACT_DIGITS} digits, numbers only`
+                  }
+                  error={fieldErrors.contactNumber}
                 />
                 <Field
                   label="Email Address"
                   icon="email-outline"
                   value={form.email}
-                  onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
+                  onChangeText={(v) => {
+                    setForm((f) => ({ ...f, email: v }));
+                    if (fieldErrors.email) {
+                      setFieldErrors((e) => ({ ...e, email: undefined }));
+                    }
+                  }}
+                  onBlur={() =>
+                    setFieldErrors((e) => ({
+                      ...e,
+                      email: validateEmail(form.email) || undefined,
+                    }))
+                  }
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  placeholder="yourname@gmail.com"
+                  error={fieldErrors.email}
                 />
 
                 <View style={styles.editDivider} />
@@ -821,70 +875,6 @@ export default function DriverProfile() {
                   ) : (
                     <Text style={styles.modalConfirmText}>Save</Text>
                   )}
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
-
-        {/* ===== ADMIN REQUEST MODAL ===== */}
-        <Modal
-          visible={showRequestModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowRequestModal(false)}
-        >
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setShowRequestModal(false)}
-          >
-            <Pressable
-              style={styles.modalCard}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={styles.modalIconWrap}>
-                <MaterialCommunityIcons
-                  name="message-alert-outline"
-                  size={26}
-                  color="#319086"
-                />
-              </View>
-
-              <Text style={[styles.modalTitle, { color: "#1f6f66" }]}>
-                Request {requestType} change
-              </Text>
-              <Text style={styles.modalMessage}>
-                {requestType === "vehicle"
-                  ? "Tell the admin why you need a different vehicle and what plate/type you should be assigned."
-                  : "Tell the admin why you need to move to a different terminal."}
-              </Text>
-
-              <TextInput
-                style={styles.requestInput}
-                value={requestMessage}
-                onChangeText={setRequestMessage}
-                placeholder="Describe your request…"
-                placeholderTextColor="#b5c4c0"
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalCancelBtn]}
-                  onPress={() => setShowRequestModal(false)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.requestSubmitBtn]}
-                  onPress={handleSubmitRequest}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalConfirmText}>Submit</Text>
                 </TouchableOpacity>
               </View>
             </Pressable>
@@ -953,6 +943,10 @@ function Field({
   autoCapitalize,
   placeholder,
   optional,
+  maxLength,
+  onBlur,
+  error,
+  helper,
 }: {
   label: string;
   icon: any;
@@ -963,6 +957,10 @@ function Field({
   autoCapitalize?: any;
   placeholder?: string;
   optional?: boolean;
+  maxLength?: number;
+  onBlur?: () => void;
+  error?: string;
+  helper?: string;
 }) {
   return (
     <View style={styles.fieldWrap}>
@@ -970,25 +968,40 @@ function Field({
         {label}
         {optional ? <Text style={styles.fieldOptional}>  · optional</Text> : null}
       </Text>
-      <View style={styles.fieldInputWrap}>
+      <View style={[styles.fieldInputWrap, error ? styles.fieldInputWrapError : null]}>
         <MaterialCommunityIcons
           name={icon}
           size={16}
-          color="#7f9f97"
+          color={error ? "#e74c3c" : "#7f9f97"}
           style={styles.fieldIcon}
         />
         <TextInput
           style={styles.fieldInput}
           value={value}
           onChangeText={onChangeText}
+          onBlur={onBlur}
           placeholder={placeholder}
           placeholderTextColor="#b5c4c0"
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize ?? "words"}
           autoCorrect={false}
+          maxLength={maxLength}
         />
       </View>
+
+      {error ? (
+        <View style={styles.fieldErrorRow}>
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={12}
+            color="#e74c3c"
+          />
+          <Text style={styles.fieldErrorText}>{error}</Text>
+        </View>
+      ) : helper ? (
+        <Text style={styles.fieldHelperText}>{helper}</Text>
+      ) : null}
     </View>
   );
 }
@@ -1361,21 +1374,6 @@ const styles = StyleSheet.create({
     color: "#1f3d38",
   },
 
-  requestRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  requestText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "monsterrat_font",
-    fontWeight: "600",
-    color: "#319086",
-  },
-
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1490,6 +1488,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(49,144,134,0.22)",
     paddingHorizontal: 12,
   },
+  fieldInputWrapError: {
+    borderColor: "rgba(231, 76, 60, 0.65)",
+    backgroundColor: "rgba(255, 244, 242, 0.95)",
+  },
   fieldIcon: { marginRight: 8 },
   fieldInput: {
     flex: 1,
@@ -1497,6 +1499,26 @@ const styles = StyleSheet.create({
     fontFamily: "monster_act",
     fontSize: 13,
     color: "#1f3d38",
+  },
+  fieldErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 5,
+    marginLeft: 2,
+  },
+  fieldErrorText: {
+    flex: 1,
+    fontSize: 10.5,
+    fontFamily: "monster_act",
+    color: "#e74c3c",
+  },
+  fieldHelperText: {
+    fontSize: 10.5,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginTop: 5,
+    marginLeft: 2,
   },
 
   editDivider: {
@@ -1561,7 +1583,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(127,159,151,0.3)",
   },
   modalConfirmBtn: { backgroundColor: "#319086" },
-  requestSubmitBtn: { backgroundColor: "#319086" },
   modalCancelText: {
     color: "#4a5f5a",
     fontSize: 13,
@@ -1573,20 +1594,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "monsterrat_font",
     fontWeight: "700",
-  },
-
-  requestInput: {
-    width: "100%",
-    minHeight: 90,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(49,144,134,0.22)",
-    backgroundColor: "rgba(255,255,255,0.65)",
-    fontFamily: "monster_act",
-    fontSize: 13,
-    color: "#1f3d38",
-    marginBottom: 20,
   },
 
   row: {

@@ -899,16 +899,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
 
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    backgroundColor: "#ffffffb1",
     borderTopRightRadius: 14,
     borderTopLeftRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
 
     borderWidth: 1,
-    borderColor: "rgba(210, 230, 224, 0.9)",
+    borderColor: "rgb(250, 250, 250)",
 
-    shadowColor: "#000",
+    shadowColor: "#ffffffb1",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
     shadowRadius: 10,
@@ -930,14 +930,14 @@ const styles = StyleSheet.create({
 
    mapToggle: {
     position: "absolute",
-    left: 15,          // aligns with the header card's left offset
+    left: 15,     
     zIndex: 8,
     borderRadius: 22,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.9)",
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
-    shadowColor: "#000",
+    borderColor: "rgb(255, 255, 255)",
+    backgroundColor: "#ffffffb1",
+    shadowColor: "#ffffffb1",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 6,
@@ -961,16 +961,16 @@ const styles = StyleSheet.create({
     right: 15,
     zIndex: 9,
 
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    backgroundColor: "#ffffffb1",
     borderBottomRightRadius: 14,
     borderBottomLeftRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 12,
 
     borderWidth: 1,
-    borderColor: "rgba(210, 230, 224, 0.9)",
+    borderColor: "rgb(255, 255, 255)",
 
-    shadowColor: "#000",
+    shadowColor: "#ffffffb1",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.14,
     shadowRadius: 10,

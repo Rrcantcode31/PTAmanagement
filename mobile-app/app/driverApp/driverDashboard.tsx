@@ -31,6 +31,19 @@ type Departure = {
   zone_name: string | null;
 };
 
+type QueueItem = {
+  queue_id: number;
+  driver_id: number;
+  queue_position: number;
+  queue_status: "WAITING" | "QUEUED";
+  plate_number: string | null;
+  vehicle_type: string | null;
+  scheduled_dispatch_at?: string | null;
+};
+
+// How long each queue slot lasts (keep in sync with backend SLOT_DURATION_MINUTES)
+const SLOT_MINUTES = 30;
+
 export default function DriverDashboard() {
   const { user, token } = useAuth();
   const pathname = usePathname();
@@ -46,6 +59,13 @@ export default function DriverDashboard() {
   const [vehicle, setVehicle] = useState({
     plate: "—",
     type: "—",
+  });
+
+  // Real queue state, derived from /driverQueue response
+  const [queueInfo, setQueueInfo] = useState({
+    position: 0,
+    total: 0,
+    etaMin: 0,
   });
 
   const socketRef = useRef<Socket | null>(null);
@@ -73,7 +93,7 @@ export default function DriverDashboard() {
     (user as any)?.id;
 
   // ============================================================
-  // Fetch today's trips from the backend
+  // Fetch today's trips
   // ============================================================
   const fetchStats = async () => {
     if (!driverId) return;
@@ -137,13 +157,13 @@ export default function DriverDashboard() {
   }, [driverId]);
 
   // ============================================================
-  // Fetch vehicle info (plate + real vehicle type)
+  // Fetch vehicle + queue info (polled every 20s)
   // ============================================================
   useEffect(() => {
     if (!driverId) return;
     let cancelled = false;
 
-    (async () => {
+    const load = async () => {
       try {
         const res = await fetch(
           `${API_URL}/api/auth/driverQueue?driver_id=${driverId}`,
@@ -156,18 +176,52 @@ export default function DriverDashboard() {
         );
         const json = await res.json();
         if (cancelled) return;
+
         if (json.success && json.data?.driver) {
+          // ---- 1. Vehicle ----
           setVehicle({
             plate: json.data.driver.plate_number || "—",
             type:  json.data.driver.vehicle_type || "—",
           });
+
+          // ---- 2. Queue info ----
+          const queueList: QueueItem[] = json.data.queue || [];
+          const total = queueList.length;
+
+          const myEntry = queueList.find(
+            (q) => Number(q.driver_id) === Number(driverId)
+          );
+
+          const position = myEntry?.queue_position ?? 0;
+
+          // Prefer scheduled_dispatch_at if the backend sends it
+          let etaMin = 0;
+          if (myEntry?.scheduled_dispatch_at) {
+            const t = new Date(myEntry.scheduled_dispatch_at).getTime();
+            if (!Number.isNaN(t)) {
+              etaMin = Math.max(
+                0,
+                Math.round((t - Date.now()) / 60000)
+              );
+            }
+          } else if (position > 0) {
+            // Fallback: approximate as (position - 1) × slot duration
+            etaMin = (position - 1) * SLOT_MINUTES;
+          }
+
+          setQueueInfo({ position, total, etaMin });
         }
       } catch (e) {
-        console.warn("[dashboard] vehicle fetch failed:", e);
+        console.warn("[dashboard] queue/vehicle fetch failed:", e);
       }
-    })();
+    };
 
-    return () => { cancelled = true; };
+    load();
+    const timer = setInterval(load, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [driverId, token]);
 
   // ============================================================
@@ -208,6 +262,7 @@ export default function DriverDashboard() {
       socket.on("queue:left", () => {
         if (!mounted) return;
         setBackendStatus("INACTIVE");
+        setQueueInfo({ position: 0, total: 0, etaMin: 0 });
       });
 
       socket.on("queue:join:error", ({ message }: { message: string }) => {
@@ -275,12 +330,14 @@ export default function DriverDashboard() {
     return "Good Evening";
   };
 
-  // TODO: replace queue with real data later
-  const queue = { position: 3, total: 12, etaMin: 12 };
-
-  const driversAhead = Math.max(queue.position - 1, 0);
-  const queueProgress = (queue.total - queue.position + 1) / queue.total;
-  const isNext = isOnline && queue.position === 1;
+  // ---- Derived from real queueInfo ----
+  const inQueue = queueInfo.position > 0;
+  const driversAhead = Math.max(queueInfo.position - 1, 0);
+  const queueProgress =
+    queueInfo.total > 0 && inQueue
+      ? (queueInfo.total - queueInfo.position + 1) / queueInfo.total
+      : 0;
+  const isNext = isOnline && queueInfo.position === 1;
 
   // ============================================================
   // Status display
@@ -419,7 +476,7 @@ export default function DriverDashboard() {
               </View>
             </BlurView>
 
-            {/* 3 ── QUEUE */}
+            {/* 3 ── QUEUE (real data) */}
             <BlurView intensity={40} tint="light" style={styles.glassCard}>
               <View style={styles.queueHeader}>
                 <Text style={styles.cardLabel}>Your queue</Text>
@@ -430,12 +487,14 @@ export default function DriverDashboard() {
                 )}
               </View>
 
-              {isOnline ? (
+              {inQueue ? (
                 <>
                   <View style={styles.queueMainRow}>
                     <View style={styles.queueBlock}>
-                      <Text style={styles.queueBig}>#{queue.position}</Text>
-                      <Text style={styles.queueSub}>of {queue.total} drivers</Text>
+                      <Text style={styles.queueBig}>#{queueInfo.position}</Text>
+                      <Text style={styles.queueSub}>
+                        of {queueInfo.total} drivers
+                      </Text>
                     </View>
 
                     <View style={styles.queueSeparator} />
@@ -447,7 +506,7 @@ export default function DriverDashboard() {
                           size={18}
                           color="#D97706"
                         />
-                        <Text style={styles.queueBig}>{queue.etaMin}</Text>
+                        <Text style={styles.queueBig}>{queueInfo.etaMin}</Text>
                         <Text style={styles.queueUnit}>min</Text>
                       </View>
                       <Text style={styles.queueSub}>est. wait</Text>
@@ -498,9 +557,7 @@ export default function DriverDashboard() {
                 <Text style={styles.vehicleModel} numberOfLines={1}>
                   {vehicle.type}
                 </Text>
-                <Text style={styles.vehiclePlate}>
-                  {vehicle.plate}
-                </Text>
+                <Text style={styles.vehiclePlate}>{vehicle.plate}</Text>
               </View>
 
               <View style={styles.vehicleDivider} />
@@ -517,7 +574,8 @@ export default function DriverDashboard() {
                 <Text style={styles.cardLabel}>Today's Departures</Text>
                 <View style={styles.departuresCountPill}>
                   <Text style={styles.departuresCountText}>
-                    {departures.length} {departures.length === 1 ? "trip" : "trips"}
+                    {departures.length}{" "}
+                    {departures.length === 1 ? "trip" : "trips"}
                   </Text>
                 </View>
               </View>
@@ -548,9 +606,11 @@ export default function DriverDashboard() {
                         : d.zone_name || "—";
 
                     const approvalLabel =
-                      d.approval_type === "system" ? "Auto-dispatched"
-                      : d.approval_type === "admin" ? "Admin approved"
-                      : d.approval_type || "Manual";
+                      d.approval_type === "system"
+                        ? "Auto-dispatched"
+                        : d.approval_type === "admin"
+                        ? "Admin approved"
+                        : d.approval_type || "Manual";
 
                     return (
                       <View
@@ -565,16 +625,10 @@ export default function DriverDashboard() {
                         </View>
 
                         <View style={{ flex: 1 }}>
-                          <Text
-                            style={styles.departureRoute}
-                            numberOfLines={1}
-                          >
+                          <Text style={styles.departureRoute} numberOfLines={1}>
                             {route}
                           </Text>
-                          <Text
-                            style={styles.departureMeta}
-                            numberOfLines={1}
-                          >
+                          <Text style={styles.departureMeta} numberOfLines={1}>
                             {d.plate_number || "—"} · {approvalLabel}
                           </Text>
                         </View>
@@ -679,7 +733,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(233,240,238,0.9)",
   },
 
-  // ---------- hero (status only) ----------
+  // ---------- hero ----------
   heroCard: {
     borderRadius: 22,
     paddingVertical: 16,
@@ -717,11 +771,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: "right",
   },
-
-  statusBlock: {
-    alignItems: "center",
-    paddingVertical: 20,
-  },
+  statusBlock: { alignItems: "center", paddingVertical: 20 },
   statusBlockLabel: {
     fontSize: 10,
     fontFamily: "monsterrat_font",
@@ -736,7 +786,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: "center",
   },
-
   heroBottomRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -746,7 +795,7 @@ const styles = StyleSheet.create({
   heroMetaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   heroMetaText: { fontSize: 10, fontFamily: "monster_act", color: "#7f9f97" },
 
-  // ---------- generic glass card ----------
+  // ---------- generic card ----------
   glassCard: {
     backgroundColor: CARD_BG,
     borderRadius: 18,
@@ -855,14 +904,12 @@ const styles = StyleSheet.create({
     color: "#7f9f97",
     marginTop: 2,
   },
-
   vehicleDivider: {
     width: 1,
     alignSelf: "stretch",
     backgroundColor: "rgba(233,240,238,0.9)",
     marginVertical: 2,
   },
-
   tripsCol: {
     alignItems: "center",
     justifyContent: "center",
@@ -884,7 +931,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ---------- today's departures ----------
+  // ---------- departures ----------
   departuresHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -904,7 +951,6 @@ const styles = StyleSheet.create({
     color: "#319086",
     letterSpacing: 0.4,
   },
-
   departuresEmpty: {
     alignItems: "center",
     justifyContent: "center",
@@ -917,7 +963,6 @@ const styles = StyleSheet.create({
     color: "#7f9f97",
     textAlign: "center",
   },
-
   departureRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -928,7 +973,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.6,
     borderBottomColor: "rgba(233,240,238,0.9)",
   },
-
   departureTimeBox: {
     minWidth: 62,
     paddingHorizontal: 8,
@@ -944,7 +988,6 @@ const styles = StyleSheet.create({
     color: "#1f6f66",
     letterSpacing: 0.5,
   },
-
   departureRoute: {
     fontSize: 12,
     fontFamily: "monsterrat_kp",
@@ -956,7 +999,6 @@ const styles = StyleSheet.create({
     color: "#7f9f97",
     marginTop: 2,
   },
-
   departuresMore: {
     fontSize: 10,
     fontFamily: "monster_act",
@@ -966,7 +1008,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // ---------- queue progress bar ----------
+  // ---------- progress bar ----------
   progressTrack: {
     height: 8,
     borderRadius: 4,

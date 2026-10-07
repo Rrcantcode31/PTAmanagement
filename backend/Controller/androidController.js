@@ -386,6 +386,39 @@ export const updateUser = async (req, res) => {
   }
 };
 
+//update commuter profile
+export const updateUserAvatar = async (req, res) => {
+  try {
+    const userId = req.params.id || req.body.user_id;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "user_id required" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+
+    const relativePath = `/uploads/avatars/${req.file.filename}`;
+
+    const [result] = await db.promise().query(
+      `UPDATE user_info SET user_profile = ? WHERE user_id = ?`,
+      [relativePath, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Avatar updated",
+      url: relativePath,
+    });
+  } catch (err) {
+    console.error("updateUserAvatar error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // UPDATE DRIVER
 export const updateDriver = async (req, res) => {
   try {

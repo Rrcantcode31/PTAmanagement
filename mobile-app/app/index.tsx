@@ -165,7 +165,7 @@ export default function Login() {
                 style={styles.inputIcon}
               />
               <TextInput
-                placeholder="Username / Email"
+                placeholder=" Email "
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
                 onChangeText={setEmail}
@@ -222,7 +222,7 @@ export default function Login() {
                   )
                 }
               >
-                <Text style={styles.forgotLink}>Forgot your password?</Text>
+                
               </TouchableOpacity>
             </View>
 
@@ -420,13 +420,6 @@ const styles = StyleSheet.create({
   },
 
   forgotWrap: {},
-
-  forgotLink: {
-    color: "#4384ac",
-    fontSize: 12,
-    fontFamily: "monsterrat_font",
-    fontWeight: "600",
-  },
 
   loginBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.65)",
