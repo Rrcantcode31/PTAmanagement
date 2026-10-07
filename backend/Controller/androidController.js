@@ -549,6 +549,41 @@ export const updateDriver = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+//update driver profile
+export const updateDriverAvatar = async (req, res) => {
+  try {
+    const driverId = req.params.id || req.body.driver_id;
+
+    if (!driverId) {
+      return res.status(400).json({ success: false, message: "driver_id required" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+
+    const relativePath = `/uploads/avatars/${req.file.filename}`;
+
+    const [result] = await db.promise().query(
+      `UPDATE driver_info SET driver_profile = ? WHERE driver_id = ?`,
+      [relativePath, driverId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Avatar updated",
+      url: relativePath,
+    });
+  } catch (err) {
+    console.error("updateDriverAvatar error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // GET ROLES 
 export const getRoles = async (req, res) => {
   try {

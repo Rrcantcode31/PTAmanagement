@@ -44,3 +44,25 @@ export const requireRole = (...allowedRoles) => (req, res, next) => {
   }
   next();
 };
+
+export function requireSelfOrAdmin(getTargetId) {
+  return (req, res, next) => {
+    const requester = req.user;                // set by verifyToken
+    if (!requester) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const targetId = getTargetId(req);
+    const isAdmin =
+      requester.type === 'admin' ||
+      (requester.role || '').toLowerCase().includes('admin');
+
+    if (isAdmin) return next();
+    if (Number(requester.id) === Number(targetId)) return next();
+
+    return res.status(403).json({
+      success: false,
+      message: 'You can only update your own account',
+    });
+  };
+}

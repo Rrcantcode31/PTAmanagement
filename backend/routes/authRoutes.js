@@ -2,9 +2,9 @@ import express from 'express';
 import 
 { signup, login, getRoles, 
 GetAllTerminalLocations, getFarePrices, getDriverQueue, 
-getTerminalQueue, getNearbyTerminals, getTripEstimate, getDriverStats,  updateUser, updateDriver} from '../Controller/androidController.js';
-
-import { verifyToken, requireType, } from '../middleware/authMiddleware.js'
+getTerminalQueue, getNearbyTerminals, getTripEstimate, getDriverStats,  updateUser, updateDriver, updateDriverAvatar} from '../Controller/androidController.js';
+import { uploadAvatar } from "../middleware/upload.js";
+import { verifyToken, requireType,  requireSelfOrAdmin } from '../middleware/authMiddleware.js'
 
 
 const router = express.Router();
@@ -22,9 +22,17 @@ router.get('/nearbyTerminals', verifyToken, getNearbyTerminals);
 router.get('/tripEstimate', verifyToken, getTripEstimate);
 router.get("/driverStats", verifyToken, requireType('driver'), getDriverStats);
 
-
+//PUT data response
 router.put("/user/:id",verifyToken ,updateUser);
-router.put("/driver/:id",verifyToken ,updateDriver);
+
+router.put("/driver/:id", verifyToken, requireType("driver", "admin"),
+  requireSelfOrAdmin((req) => Number(req.params.id)),
+  updateDriver
+);
+
+router.put("/driver/:id/avatar", verifyToken, requireSelfOrAdmin((req) => Number(req.params.id)), 
+ uploadAvatar.single("avatar"), 
+ updateDriverAvatar);
 
 
 

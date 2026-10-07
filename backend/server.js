@@ -30,10 +30,9 @@ import authRoutes from "./routes/authRoutes.js";
 // import transportRoutes from "./routes/transportRoutes.js";
 
 app.use("/api/auth", authRoutes);
-// app.use("/api/users", userRoutes);
-// app.use("/api/transport", transportRoutes);
 
-// ================= TEST ROUTE =================
+app.use("/uploads", express.static("uploads"));
+
 app.get("/", (req, res) => {
     res.send("🚀 PTA Management Backend Running");
 });
