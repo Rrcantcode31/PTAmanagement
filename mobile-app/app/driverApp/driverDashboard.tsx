@@ -21,6 +21,16 @@ import { API_URL } from "../_layout";
 
 type BackendStatus = "ACTIVE" | "INACTIVE" | "UNKNOWN";
 
+type Departure = {
+  departure_id: number;
+  departure_time: string;
+  approval_type: string;
+  plate_number: string | null;
+  from_terminal: string | null;
+  to_terminal: string | null;
+  zone_name: string | null;
+};
+
 export default function DriverDashboard() {
   const { user, token } = useAuth();
   const pathname = usePathname();
@@ -31,6 +41,7 @@ export default function DriverDashboard() {
   const [gpsError, setGpsError] = useState<string | null>(null);
 
   const [tripsToday, setTripsToday] = useState(0);
+  const [departures, setDepartures] = useState<Departure[]>([]);
 
   const [vehicle, setVehicle] = useState({
     plate: "—",
@@ -96,8 +107,33 @@ export default function DriverDashboard() {
     }
   };
 
+  // ============================================================
+  // Fetch today's departures
+  // ============================================================
+  const fetchDepartures = async () => {
+    if (!driverId) return;
+    try {
+      const res = await fetch(
+        `${API_URL}/api/auth/driverDepartures?driver_id=${driverId}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const json = await res.json();
+      if (json.success) {
+        setDepartures(json.data.departures || []);
+      }
+    } catch (e) {
+      console.warn("[dashboard] departures fetch failed:", e);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchDepartures();
   }, [driverId]);
 
   // ============================================================
@@ -182,6 +218,7 @@ export default function DriverDashboard() {
         console.log("[driver] trip started:", data);
         if (!mounted) return;
         fetchStats();
+        fetchDepartures();
       });
 
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -466,14 +503,98 @@ export default function DriverDashboard() {
                 </Text>
               </View>
 
-              {/* Divider between vehicle info and trip count */}
               <View style={styles.vehicleDivider} />
 
-              {/* Trips today */}
               <View style={styles.tripsCol}>
                 <Text style={styles.tripsValue}>{tripsToday}</Text>
                 <Text style={styles.tripsLabel}>Trip today</Text>
               </View>
+            </BlurView>
+
+            {/* 5 ── TODAY'S DEPARTURES */}
+            <BlurView intensity={40} tint="light" style={styles.glassCard}>
+              <View style={styles.departuresHeader}>
+                <Text style={styles.cardLabel}>Today's Departures</Text>
+                <View style={styles.departuresCountPill}>
+                  <Text style={styles.departuresCountText}>
+                    {departures.length} {departures.length === 1 ? "trip" : "trips"}
+                  </Text>
+                </View>
+              </View>
+
+              {departures.length === 0 ? (
+                <View style={styles.departuresEmpty}>
+                  <MaterialCommunityIcons
+                    name="calendar-blank-outline"
+                    size={26}
+                    color="#b5c4c0"
+                  />
+                  <Text style={styles.departuresEmptyText}>
+                    No departures recorded yet today.
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  {departures.slice(0, 5).map((d, idx) => {
+                    const visibleCount = Math.min(departures.length, 5);
+                    const time = new Date(d.departure_time).toLocaleTimeString(
+                      "en-PH",
+                      { hour: "2-digit", minute: "2-digit" }
+                    );
+
+                    const route =
+                      d.from_terminal && d.to_terminal
+                        ? `${d.from_terminal} → ${d.to_terminal}`
+                        : d.zone_name || "—";
+
+                    const approvalLabel =
+                      d.approval_type === "system" ? "Auto-dispatched"
+                      : d.approval_type === "admin" ? "Admin approved"
+                      : d.approval_type || "Manual";
+
+                    return (
+                      <View
+                        key={d.departure_id}
+                        style={[
+                          styles.departureRow,
+                          idx !== visibleCount - 1 && styles.departureRowBorder,
+                        ]}
+                      >
+                        <View style={styles.departureTimeBox}>
+                          <Text style={styles.departureTime}>{time}</Text>
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={styles.departureRoute}
+                            numberOfLines={1}
+                          >
+                            {route}
+                          </Text>
+                          <Text
+                            style={styles.departureMeta}
+                            numberOfLines={1}
+                          >
+                            {d.plate_number || "—"} · {approvalLabel}
+                          </Text>
+                        </View>
+
+                        <MaterialCommunityIcons
+                          name="check-circle"
+                          size={16}
+                          color="#16A34A"
+                        />
+                      </View>
+                    );
+                  })}
+
+                  {departures.length > 5 && (
+                    <Text style={styles.departuresMore}>
+                      +{departures.length - 5} more today
+                    </Text>
+                  )}
+                </View>
+              )}
             </BlurView>
 
             <View style={{ height: navTotalSpace }} />
@@ -735,7 +856,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Vertical divider between vehicle and trip count
   vehicleDivider: {
     width: 1,
     alignSelf: "stretch",
@@ -743,7 +863,6 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
 
-  // Trips today block on the right
   tripsCol: {
     alignItems: "center",
     justifyContent: "center",
@@ -765,7 +884,89 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-    // ---------- queue progress bar ----------
+  // ---------- today's departures ----------
+  departuresHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  departuresCountPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: "rgba(49,144,134,0.12)",
+  },
+  departuresCountText: {
+    fontSize: 10,
+    fontFamily: "monsterrat_font",
+    fontWeight: "700",
+    color: "#319086",
+    letterSpacing: 0.4,
+  },
+
+  departuresEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+    gap: 6,
+  },
+  departuresEmptyText: {
+    fontSize: 12,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    textAlign: "center",
+  },
+
+  departureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+  },
+  departureRowBorder: {
+    borderBottomWidth: 0.6,
+    borderBottomColor: "rgba(233,240,238,0.9)",
+  },
+
+  departureTimeBox: {
+    minWidth: 62,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(49,144,134,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  departureTime: {
+    fontSize: 12,
+    fontFamily: "digitalFont",
+    color: "#1f6f66",
+    letterSpacing: 0.5,
+  },
+
+  departureRoute: {
+    fontSize: 12,
+    fontFamily: "monsterrat_kp",
+    color: "#1f3d38",
+  },
+  departureMeta: {
+    fontSize: 10,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginTop: 2,
+  },
+
+  departuresMore: {
+    fontSize: 10,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    textAlign: "center",
+    marginTop: 8,
+    fontStyle: "italic",
+  },
+
+  // ---------- queue progress bar ----------
   progressTrack: {
     height: 8,
     borderRadius: 4,

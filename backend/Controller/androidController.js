@@ -1035,3 +1035,58 @@ export const getDriverStats = async (req, res) => {
   }
 };
 
+
+// GET driver's departure logs (today by default)
+export const getDriverDepartures = async (req, res) => {
+  try {
+    const { driver_id, date } = req.query;
+    if (!driver_id) {
+      return res.status(400).json({ success: false, message: "driver_id required" });
+    }
+
+    // Default to today; if a date is passed, use that
+    const targetDate = date || new Date().toISOString().slice(0, 10);
+
+    const [rows] = await db.promise().query(
+      `SELECT
+         dl.departure_id,
+         dl.departure_time,
+         dl.approval_type,
+         dl.zone_id,
+         v.plate_number,
+         tf.terminal_name AS from_terminal,
+         tt.terminal_name AS to_terminal,
+         dz.zone_name
+       FROM departure_logs dl
+       LEFT JOIN vehicles v            ON dl.vehicle_id       = v.vehicle_id
+       LEFT JOIN terminal_bounds tb    ON dl.bounds_id        = tb.bounds_id
+       LEFT JOIN terminal_locations tf ON tb.from_terminal_id = tf.terminal_id
+       LEFT JOIN terminal_locations tt ON tb.to_terminal_id   = tt.terminal_id
+       LEFT JOIN dispatch_zones dz     ON dl.zone_id          = dz.zone_id
+       WHERE dl.driver_info_id = ?
+         AND DATE(dl.departure_time) = ?
+       ORDER BY dl.departure_time DESC`,
+      [driver_id, targetDate]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        date: targetDate,
+        count: rows.length,
+        departures: rows.map((r) => ({
+          departure_id:   r.departure_id,
+          departure_time: r.departure_time,
+          approval_type:  r.approval_type,
+          plate_number:   r.plate_number,
+          from_terminal:  r.from_terminal,
+          to_terminal:    r.to_terminal,
+          zone_name:      r.zone_name,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("getDriverDepartures error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

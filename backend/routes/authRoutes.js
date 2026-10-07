@@ -1,7 +1,7 @@
 import express from 'express';
 import 
 { signup, login, getRoles, 
-GetAllTerminalLocations, getFarePrices, getDriverQueue, 
+GetAllTerminalLocations, getFarePrices, getDriverQueue, getDriverDepartures,
 getTerminalQueue, getNearbyTerminals, getTripEstimate, getDriverStats,  updateUser, updateDriver, updateDriverAvatar} from '../Controller/androidController.js';
 import { uploadAvatar } from "../middleware/upload.js";
 import { verifyToken, requireType,  requireSelfOrAdmin } from '../middleware/authMiddleware.js'
@@ -21,11 +21,12 @@ router.get('/driverQueue', verifyToken, requireType('driver', 'user'), getDriver
 router.get('/nearbyTerminals', verifyToken, getNearbyTerminals);
 router.get('/tripEstimate', verifyToken, getTripEstimate);
 router.get("/driverStats", verifyToken, requireType('driver'), getDriverStats);
+router.get("/driverDepartures", verifyToken, requireType('driver', 'admin'), getDriverDepartures);
 
 //PUT data response
 router.put("/user/:id",verifyToken ,updateUser);
 
-router.put("/driver/:id", verifyToken, requireType("driver", "admin"),
+router.put("/driver/:id", verifyToken, requireType( 'driver', 'admin'),
   requireSelfOrAdmin((req) => Number(req.params.id)),
   updateDriver
 );
