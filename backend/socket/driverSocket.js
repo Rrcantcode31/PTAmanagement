@@ -2,24 +2,27 @@ import db from "../config/env.js";
 import { findZoneContainingPoint } from "./helper/geofence.js";
 
 // ============================================================
-// CONFIG
+// CONFIG  (with safety fallbacks so NaN can never happen)
 // ============================================================
-const SLOT_DURATION_MINUTES   = Number(process.env.SLOT_DURATION_MINUTES || 30);
-const DEPARTURE_GRACE_SECONDS = Number(process.env.DEPARTURE_GRACE_SECONDS || 60);
-
-const HUB_TERMINAL_ID = Number(process.env.HUB_TERMINAL_ID || 1);
-const REQUIRED_INSIDE_MS = Number(process.env.REQUIRED_INSIDE_MS || 15000);
-const REQUIRED_OUTSIDE_MS = Number(process.env.REQUIRED_OUTSIDE_MS || 45000);
+const SLOT_DURATION_MINUTES   = Number(process.env.SLOT_DURATION_MINUTES   || 30);
+const DEPARTURE_GRACE_SECONDS = Number(process.env.DEPARTURE_GRACE_SECONDS || 5);
+const HUB_TERMINAL_ID         = Number(process.env.HUB_TERMINAL_ID         || 1);
+const REQUIRED_INSIDE_MS      = Number(process.env.REQUIRED_INSIDE_MS      || 5000);
+const REQUIRED_OUTSIDE_MS     = Number(process.env.REQUIRED_OUTSIDE_MS     || 5000);
 const REQUEUE_COOLDOWN_SECONDS = Number(process.env.REQUEUE_COOLDOWN_SECONDS || 60);
+const OVERDUE_MARGIN_MINUTES  = Number(process.env.OVERDUE_MARGIN_MINUTES  || 5);
+const OVERDUE_CHECK_INTERVAL_MS = 60000;
 
-// ============================================================
-// OVERDUE SAFETY NET
-// ============================================================
-// If a driver's scheduled slot expired more than this many minutes ago,
-// force-dispatch them regardless of GPS status. This catches drivers
-// whose app is closed, phone is off, or GPS is not sending pings.
-const OVERDUE_MARGIN_MINUTES = Number(process.env.OVERDUE_MARGIN_MINUTES || 5);
-const OVERDUE_CHECK_INTERVAL_MS = 60000; // Run every 60s
+// Startup sanity log — visible proof that env values loaded correctly
+console.log("[config] Loaded values:", {
+  SLOT_DURATION_MINUTES,
+  DEPARTURE_GRACE_SECONDS,
+  HUB_TERMINAL_ID,
+  REQUIRED_INSIDE_MS,
+  REQUIRED_OUTSIDE_MS,
+  REQUEUE_COOLDOWN_SECONDS,
+  OVERDUE_MARGIN_MINUTES,
+});
 
 // ============================================================
 // MODULE-LEVEL STATE
@@ -28,20 +31,21 @@ const pendingDepartureTimers = new Map();
 const insideSince            = new Map();
 const outsideSince           = new Map();
 
-let overdueDispatcherStarted = false;
+let overdueTickCount = 0;
 
 // ============================================================
-// OVERDUE DISPATCHER — start once, runs globally
+// OVERDUE DISPATCHER — export so server.js can start it
 // ============================================================
-function startOverdueDispatcher(io) {
+export function startOverdueDispatcher(io) {
   console.log(
-    `[overdue] Safety net started — will force-dispatch WAITING entries ` +
-    `that are ${OVERDUE_MARGIN_MINUTES}+ min past their scheduled slot. ` +
+    `[overdue] ✅ Safety net started — force-dispatch WAITING entries ` +
+    `${OVERDUE_MARGIN_MINUTES}+ min past their scheduled slot. ` +
     `Checking every ${OVERDUE_CHECK_INTERVAL_MS / 1000}s.`
   );
 
   setInterval(async () => {
     try {
+      overdueTickCount++;
       const cutoff = new Date(Date.now() - OVERDUE_MARGIN_MINUTES * 60 * 1000);
       const cutoffStr = cutoff.toISOString().slice(0, 19).replace("T", " ");
 
@@ -57,7 +61,17 @@ function startOverdueDispatcher(io) {
         [cutoffStr]
       );
 
-      if (overdueRows.length === 0) return;
+      if (overdueRows.length === 0) {
+        if (overdueTickCount % 5 === 0) {
+          console.log(
+            `[overdue] 💚 Alive — tick ${overdueTickCount}, no overdue entries. ` +
+            `Cutoff: ${cutoffStr}`
+          );
+        }
+        return;
+      }
+
+      console.log(`[overdue] 🔴 Found ${overdueRows.length} overdue entr(y/ies).`);
 
       for (const q of overdueRows) {
         const overdueMin = Math.round(
@@ -72,7 +86,6 @@ function startOverdueDispatcher(io) {
         await conn.beginTransaction();
 
         try {
-          // Lock the row and re-verify
           const [still] = await conn.query(
             `SELECT queue_id FROM vehicle_queue
               WHERE queue_id = ? AND queue_status = 'WAITING'
@@ -85,7 +98,6 @@ function startOverdueDispatcher(io) {
             continue;
           }
 
-          // 1. Mark DISPATCHED
           await conn.query(
             `UPDATE vehicle_queue
                 SET queue_status = 'DISPATCHED', served_at = NOW()
@@ -93,7 +105,6 @@ function startOverdueDispatcher(io) {
             [q.queue_id]
           );
 
-          // 2. Write departure log
           await conn.query(
             `INSERT INTO departure_logs
                (queue_id, driver_info_id, vehicle_id, bounds_id,
@@ -104,7 +115,6 @@ function startOverdueDispatcher(io) {
             [q.queue_id, q.driver_info_id, q.vehicle_id, q.bounds_id, q.zone_id]
           );
 
-          // 3. Promote the next QUEUED
           const [next] = await conn.query(
             `SELECT queue_id FROM vehicle_queue
               WHERE queue_status = 'QUEUED'
@@ -130,11 +140,10 @@ function startOverdueDispatcher(io) {
           conn.release();
 
           console.log(
-            `[overdue] dispatched queue_id ${q.queue_id}` +
+            `[overdue] ✅ dispatched queue_id ${q.queue_id}` +
             (promotedId ? `, promoted ${promotedId} to WAITING` : "")
           );
 
-          // Clean up any pending timer for this driver
           if (pendingDepartureTimers.has(q.driver_info_id)) {
             clearTimeout(pendingDepartureTimers.get(q.driver_info_id));
             pendingDepartureTimers.delete(q.driver_info_id);
@@ -162,12 +171,8 @@ function startOverdueDispatcher(io) {
 // HANDLERS
 // ============================================================
 export function registerDriverHandlers(io, socket) {
-
-  // Start the overdue dispatcher once
-  if (!overdueDispatcherStarted) {
-    overdueDispatcherStarted = true;
-    startOverdueDispatcher(io);
-  }
+  // NOTE: overdue dispatcher is started once at server boot (server.js),
+  // not here. Do NOT re-add the startOverdueDispatcher call here.
 
   socket.on("location:update", async ({
     driverId,
@@ -225,7 +230,7 @@ export function registerDriverHandlers(io, socket) {
         : 0;
       const sustainedOutside = sustainedOutsideMs >= REQUIRED_OUTSIDE_MS;
 
-      // ---------- 5. Debounced status decision ----------
+      // ---------- 5. Debounced status ----------
       let newStatus;
       if (!insideZone) {
         newStatus = "INACTIVE";
