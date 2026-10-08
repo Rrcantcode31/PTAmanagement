@@ -7,31 +7,167 @@ import { findZoneContainingPoint } from "./helper/geofence.js";
 const SLOT_DURATION_MINUTES   = Number(process.env.SLOT_DURATION_MINUTES || 30);
 const DEPARTURE_GRACE_SECONDS = Number(process.env.DEPARTURE_GRACE_SECONDS || 60);
 
-// Koronadal City = the hub terminal that all routes originate from
 const HUB_TERMINAL_ID = Number(process.env.HUB_TERMINAL_ID || 1);
-
-// How long a driver must remain continuously inside the polygon
-// before we treat it as a genuine entry. Must be > GPS ping interval.
 const REQUIRED_INSIDE_MS = Number(process.env.REQUIRED_INSIDE_MS || 15000);
-
-// How long a driver must remain continuously OUTSIDE the polygon before
-// we treat it as a genuine departure. Blocks GPS-jitter false dispatches.
 const REQUIRED_OUTSIDE_MS = Number(process.env.REQUIRED_OUTSIDE_MS || 45000);
-
-// Secondary safety net — block re-queue if dispatched within this many seconds.
 const REQUEUE_COOLDOWN_SECONDS = Number(process.env.REQUEUE_COOLDOWN_SECONDS || 60);
 
 // ============================================================
-// MODULE-LEVEL STATE  (survives socket reconnects)
+// OVERDUE SAFETY NET
 // ============================================================
-const pendingDepartureTimers = new Map();  // driverId → timer
-const insideSince            = new Map();  // driverId → timestamp inside streak began
-const outsideSince           = new Map();  // driverId → timestamp outside streak began
+// If a driver's scheduled slot expired more than this many minutes ago,
+// force-dispatch them regardless of GPS status. This catches drivers
+// whose app is closed, phone is off, or GPS is not sending pings.
+const OVERDUE_MARGIN_MINUTES = Number(process.env.OVERDUE_MARGIN_MINUTES || 5);
+const OVERDUE_CHECK_INTERVAL_MS = 60000; // Run every 60s
+
+// ============================================================
+// MODULE-LEVEL STATE
+// ============================================================
+const pendingDepartureTimers = new Map();
+const insideSince            = new Map();
+const outsideSince           = new Map();
+
+let overdueDispatcherStarted = false;
+
+// ============================================================
+// OVERDUE DISPATCHER — start once, runs globally
+// ============================================================
+function startOverdueDispatcher(io) {
+  console.log(
+    `[overdue] Safety net started — will force-dispatch WAITING entries ` +
+    `that are ${OVERDUE_MARGIN_MINUTES}+ min past their scheduled slot. ` +
+    `Checking every ${OVERDUE_CHECK_INTERVAL_MS / 1000}s.`
+  );
+
+  setInterval(async () => {
+    try {
+      const cutoff = new Date(Date.now() - OVERDUE_MARGIN_MINUTES * 60 * 1000);
+      const cutoffStr = cutoff.toISOString().slice(0, 19).replace("T", " ");
+
+      const [overdueRows] = await db.promise().query(
+        `SELECT queue_id, driver_info_id, vehicle_id, bounds_id, zone_id,
+                scheduled_dispatch_at
+           FROM vehicle_queue
+          WHERE queue_status = 'WAITING'
+            AND scheduled_dispatch_at IS NOT NULL
+            AND scheduled_dispatch_at < ?
+          ORDER BY scheduled_dispatch_at ASC
+          LIMIT 5`,
+        [cutoffStr]
+      );
+
+      if (overdueRows.length === 0) return;
+
+      for (const q of overdueRows) {
+        const overdueMin = Math.round(
+          (Date.now() - new Date(q.scheduled_dispatch_at).getTime()) / 60000
+        );
+        console.log(
+          `[overdue] queue_id ${q.queue_id} (driver ${q.driver_info_id}) ` +
+          `is ${overdueMin}m overdue — force-dispatching`
+        );
+
+        const conn = await db.promise().getConnection();
+        await conn.beginTransaction();
+
+        try {
+          // Lock the row and re-verify
+          const [still] = await conn.query(
+            `SELECT queue_id FROM vehicle_queue
+              WHERE queue_id = ? AND queue_status = 'WAITING'
+              FOR UPDATE`,
+            [q.queue_id]
+          );
+          if (still.length === 0) {
+            await conn.rollback();
+            conn.release();
+            continue;
+          }
+
+          // 1. Mark DISPATCHED
+          await conn.query(
+            `UPDATE vehicle_queue
+                SET queue_status = 'DISPATCHED', served_at = NOW()
+              WHERE queue_id = ?`,
+            [q.queue_id]
+          );
+
+          // 2. Write departure log
+          await conn.query(
+            `INSERT INTO departure_logs
+               (queue_id, driver_info_id, vehicle_id, bounds_id,
+                departure_time, approved_by, approval_type,
+                remarks, created_at, zone_id)
+             VALUES (?, ?, ?, ?, NOW(), NULL, 'OVERDUE_AUTO',
+                     'Auto-dispatched: scheduled slot expired', NOW(), ?)`,
+            [q.queue_id, q.driver_info_id, q.vehicle_id, q.bounds_id, q.zone_id]
+          );
+
+          // 3. Promote the next QUEUED
+          const [next] = await conn.query(
+            `SELECT queue_id FROM vehicle_queue
+              WHERE queue_status = 'QUEUED'
+                AND zone_id = ?
+                AND bounds_id = ?
+              ORDER BY scheduled_dispatch_at ASC, joined_at ASC
+              LIMIT 1`,
+            [q.zone_id, q.bounds_id]
+          );
+
+          let promotedId = null;
+          if (next.length > 0) {
+            await conn.query(
+              `UPDATE vehicle_queue
+                  SET queue_status = 'WAITING'
+                WHERE queue_id = ?`,
+              [next[0].queue_id]
+            );
+            promotedId = next[0].queue_id;
+          }
+
+          await conn.commit();
+          conn.release();
+
+          console.log(
+            `[overdue] dispatched queue_id ${q.queue_id}` +
+            (promotedId ? `, promoted ${promotedId} to WAITING` : "")
+          );
+
+          // Clean up any pending timer for this driver
+          if (pendingDepartureTimers.has(q.driver_info_id)) {
+            clearTimeout(pendingDepartureTimers.get(q.driver_info_id));
+            pendingDepartureTimers.delete(q.driver_info_id);
+          }
+
+          io.to("admins").emit("queue:driver_dispatched", {
+            queue_id: q.queue_id,
+            driver_info_id: q.driver_info_id,
+            promoted_queue_id: promotedId,
+            reason: 'OVERDUE_AUTO',
+          });
+        } catch (err) {
+          await conn.rollback();
+          conn.release();
+          console.error(`[overdue] failed to dispatch ${q.queue_id}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error("[overdue] interval error:", err.message);
+    }
+  }, OVERDUE_CHECK_INTERVAL_MS);
+}
 
 // ============================================================
 // HANDLERS
 // ============================================================
 export function registerDriverHandlers(io, socket) {
+
+  // Start the overdue dispatcher once
+  if (!overdueDispatcherStarted) {
+    overdueDispatcherStarted = true;
+    startOverdueDispatcher(io);
+  }
 
   socket.on("location:update", async ({
     driverId,
@@ -115,11 +251,6 @@ export function registerDriverHandlers(io, socket) {
       });
 
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
-
-      // ==================================================
-      // 👇 THE FIX: justLeft now only depends on sustainedOutside.
-      // The WAITING check below handles filtering.
-      // ==================================================
       const justLeft = sustainedOutside;
 
       // ==================================================
@@ -135,7 +266,6 @@ export function registerDriverHandlers(io, socket) {
           console.log(`[queue] cancelled pending departure for driver ${driverId}`);
         }
 
-        // ---- Cooldown check: block re-queue shortly after dispatch ----
         const cooldownTime = new Date(Date.now() - REQUEUE_COOLDOWN_SECONDS * 1000);
 
         const [recentDispatch] = await db.promise().query(
@@ -161,7 +291,6 @@ export function registerDriverHandlers(io, socket) {
           });
         }
 
-        // ---- Resolve bounds_id ----
         let resolvedBoundsId = boundsId;
 
         if (!resolvedBoundsId) {
@@ -186,7 +315,6 @@ export function registerDriverHandlers(io, socket) {
           });
         }
 
-        // ---- Skip if already WAITING or QUEUED ----
         const [existingRows] = await db.promise().query(
           `SELECT queue_id FROM vehicle_queue
             WHERE driver_info_id = ?
@@ -196,7 +324,6 @@ export function registerDriverHandlers(io, socket) {
         );
         if (existingRows.length > 0) return;
 
-        // ---- Decide starting status: WAITING if group empty, else QUEUED ----
         const [waitingCount] = await db.promise().query(
           `SELECT COUNT(*) AS n
              FROM vehicle_queue
@@ -207,7 +334,6 @@ export function registerDriverHandlers(io, socket) {
         );
         const startingStatus = waitingCount[0].n === 0 ? 'WAITING' : 'QUEUED';
 
-        // ---- Compute slot ----
         const [schedRows] = await db.promise().query(
           `SELECT MAX(scheduled_dispatch_at) AS latest
              FROM vehicle_queue
@@ -221,7 +347,6 @@ export function registerDriverHandlers(io, socket) {
         const scheduledStr = scheduledDispatchAt
           .toISOString().slice(0, 19).replace("T", " ");
 
-        // ---- Insert ----
         const [result] = await db.promise().query(
           `INSERT INTO vehicle_queue
              (driver_info_id, vehicle_id, bounds_id, queue_status,
@@ -265,7 +390,6 @@ export function registerDriverHandlers(io, socket) {
         if (qRows.length > 0) {
           const q = qRows[0];
 
-          // 👇 FIX: Don't restart the timer on every GPS ping
           if (pendingDepartureTimers.has(driverId)) {
             console.log(
               `[queue] driver ${driverId} still outside ` +
@@ -284,7 +408,6 @@ export function registerDriverHandlers(io, socket) {
             await conn.beginTransaction();
 
             try {
-              // Re-check: still outside?
               const [checkRows] = await conn.query(
                 `SELECT status FROM driverauth WHERE driver_id = ?`,
                 [driverId]
@@ -297,7 +420,6 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
-              // Still WAITING?
               const [stillWaiting] = await conn.query(
                 `SELECT queue_id, bounds_id, vehicle_id, zone_id
                    FROM vehicle_queue
@@ -312,7 +434,6 @@ export function registerDriverHandlers(io, socket) {
                 return;
               }
 
-              // 1. Mark as DISPATCHED
               await conn.query(
                 `UPDATE vehicle_queue
                     SET queue_status = 'DISPATCHED', served_at = NOW()
@@ -320,7 +441,6 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id]
               );
 
-              // 2. Write departure log
               const [logResult] = await conn.query(
                 `INSERT INTO departure_logs
                     (queue_id, driver_info_id, vehicle_id, bounds_id,
@@ -330,7 +450,6 @@ export function registerDriverHandlers(io, socket) {
                 [q.queue_id, driverId, q.vehicle_id, q.bounds_id, q.zone_id]
               );
 
-              // 3. Promote the next QUEUED to WAITING
               const [nextInLine] = await conn.query(
                 `SELECT queue_id FROM vehicle_queue
                   WHERE queue_status = 'QUEUED'
@@ -389,7 +508,6 @@ export function registerDriverHandlers(io, socket) {
         }
       }
 
-      // Broadcast location to admins
       io.to("admins").emit("driver:location", {
         driverId, latitude, longitude,
         status: newStatus,
