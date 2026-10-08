@@ -23,7 +23,6 @@ export const verifyToken = (req, res, next) => {
   }
 };
 
-
 export const requireType = (...allowedTypes) => (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: "Not authenticated" });
@@ -34,7 +33,6 @@ export const requireType = (...allowedTypes) => (req, res, next) => {
   next();
 };
 
-// requireRole — role_name like 'Student', 'Admin'
 export const requireRole = (...allowedRoles) => (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: "Not authenticated" });

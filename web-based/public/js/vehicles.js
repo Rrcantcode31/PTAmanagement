@@ -110,8 +110,11 @@ function buildVehicleCard(vehicle) {
     vehicle.last_name
   ].filter(Boolean).join(" ");
 
-  const statusClass =
-    vehicle.status === "Active" ? "status-active" : "status-inactive";
+  // 👇 FIX: Normalize the status (trim spaces, convert to lowercase)
+  const normalizedStatus = (vehicle.status || "").trim().toLowerCase();
+  
+  // 👇 Check against the normalized string
+  const statusClass = normalizedStatus === "active" ? "status-active" : "status-inactive";
 
   item.innerHTML = `
     <div class="card-top">

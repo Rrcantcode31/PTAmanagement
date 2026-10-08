@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener("DOMContentLoaded", async () => {
 
   const modal = document.getElementById('magic-modal');
   const container = document.getElementById("regionalPriceContainer");
@@ -109,7 +109,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // INLINE FIELD VALIDATION
   // ==========================================================
 
-  // Field definitions: id → { label, validators[] }
   const FIELD_RULES = {
     email: {
       label: "Email",
@@ -124,7 +123,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     password: {
       label: "Password",
       required: true,
-      // Update mode allows empty password (means "don't change")
       skipWhenEmpty: () => updateMode,
       validate: (v) => {
         if (updateMode && !v) return null;
@@ -197,9 +195,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
   };
 
-  // ---- DOM helpers ----
-
-  // Ensure each .modal-field has an error <span> under the input.
   function ensureErrorSlots() {
     Object.keys(FIELD_RULES).forEach((id) => {
       const input = document.getElementById(id);
@@ -239,7 +234,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     Object.keys(FIELD_RULES).forEach((id) => setFieldError(id, null));
   }
 
-  // ---- Validate a single field ----
   function validateField(id) {
     const rule = FIELD_RULES[id];
     if (!rule) return null;
@@ -249,7 +243,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let value = (input.value || "").trim();
 
-    // Special case: password can be blank when updating
     if (rule.skipWhenEmpty && rule.skipWhenEmpty()) {
       setFieldError(id, null);
       return null;
@@ -260,8 +253,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return msg;
   }
 
-  // ---- Validate all fields ----
-  // Returns an object: { valid: boolean, errors: { id: message } }
   function validateAll() {
     const errors = {};
     let firstInvalidId = null;
@@ -281,15 +272,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
-  // ---- Live re-validation as user types ----
   function attachLiveValidation() {
     Object.keys(FIELD_RULES).forEach((id) => {
       const input = document.getElementById(id);
       if (!input) return;
 
       const handler = () => {
-        // Re-validate only if the field currently shows an error,
-        // so we don't yell at the user before they've submitted.
         if (input.classList.contains("input-invalid")) {
           validateField(id);
         }
@@ -298,7 +286,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       input.addEventListener("input", handler);
       input.addEventListener("change", handler);
       input.addEventListener("blur", () => {
-        // On blur, validate if the user has typed anything
         if ((input.value || "").trim() !== "") {
           validateField(id);
         }
@@ -526,11 +513,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   saveBtn.addEventListener("click", async () => {
     try {
-      // ---- Validate every field before hitting the server ----
       const { valid, errors, firstInvalidId } = validateAll();
 
       if (!valid) {
-        // Focus the first invalid field so the user can fix it right away
         if (firstInvalidId) {
           const el = document.getElementById(firstInvalidId);
           if (el) {
@@ -603,7 +588,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        // If the server gives us a field-specific error, show it inline
         if (data.field && FIELD_RULES[data.field]) {
           setFieldError(data.field, data.message || "Invalid value.");
           const el = document.getElementById(data.field);
@@ -614,7 +598,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        // Otherwise show the generic error modal
         throw new Error(data.message || "Failed to save driver");
       }
 
@@ -773,9 +756,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     contactCell.classList.add("data-cell", "col-cont-no");
     contactCell.textContent = driver.contact_number || "No Data";
 
+    // 👇 FIX: Apply dynamic status class based on the value
     const statusCell = document.createElement("div");
-    statusCell.classList.add("data-cell", "col-status", "data-highlight");
-    statusCell.textContent = driver.status || "Inactive";
+    const rawStatus = driver.status || "Inactive";
+    const normalizedStatus = rawStatus.trim().toLowerCase();
+    const statusClass = normalizedStatus === "active" ? "status-active" : "status-inactive";
+    
+    statusCell.classList.add("data-cell", "col-status", statusClass);
+    statusCell.textContent = rawStatus;
 
     const unitCell = document.createElement("div");
     unitCell.classList.add("data-cell", "col-plate-no");
@@ -915,7 +903,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // INIT
   // ==========================================================
 
-  // Inject error <span> slots into each .modal-field before anything else
   ensureErrorSlots();
   attachLiveValidation();
 

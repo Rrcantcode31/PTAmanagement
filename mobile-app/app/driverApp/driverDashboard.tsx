@@ -353,7 +353,7 @@ export default function DriverDashboard() {
   const statusHeadline = () => {
     if (gpsError) return "Location required";
     if (!gpsReady) return "Finding you…";
-    if (backendStatus === "ACTIVE") return "You're in queue";
+    if (backendStatus === "ACTIVE") return "QUEUED";
     if (backendStatus === "INACTIVE") return "Outside queue area";
     return "INACTIVE";
   };

@@ -364,9 +364,15 @@ body {
   color: #2c5149;
 }
 
-.data-highlight {
+/* 👇 ADDED: Specific status colors */
+.status-active {
   font-weight: 700;
-  color: #7a2c2c;
+  color: #15803d; /* Green */
+}
+
+.status-inactive {
+  font-weight: 700;
+  color: #dc2626; /* Red */
 }
 
 .vehicle-header {

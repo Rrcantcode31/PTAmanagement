@@ -2,11 +2,11 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { error } = require('console');
-const dbPool = require('../database/dbPool')
+const dbPool = require('../database/dbPool') // 👈 Ensure this path is correct for web-based
 
 // ============================================
 // GET /queue?zone_id=1&bounds_id=5
-// List all WAITING drivers, optionally filtered
+// List all WAITING + QUEUED drivers, optionally filtered
 // ============================================
 exports.getQueueByZone = async (req, res) => {
   try {
@@ -47,11 +47,14 @@ exports.getQueueByZone = async (req, res) => {
        LEFT JOIN terminal_locations tf ON b.from_terminal_id = tf.terminal_id
        LEFT JOIN terminal_locations tt ON b.to_terminal_id   = tt.terminal_id
        LEFT JOIN dispatch_zones dz ON q.zone_id        = dz.zone_id
-       WHERE q.queue_status = 'WAITING'
+       WHERE q.queue_status IN ('WAITING', 'QUEUED')
          AND (? IS NULL OR q.zone_id = ?)
          AND (? IS NULL OR q.bounds_id = ?)
          AND (? IS NULL OR dz.terminal_id = ?)
-       ORDER BY q.scheduled_dispatch_at ASC, q.joined_at ASC`,
+       ORDER BY 
+         CASE WHEN q.scheduled_dispatch_at IS NULL THEN 1 ELSE 0 END,
+         q.scheduled_dispatch_at ASC, 
+         q.joined_at ASC`,
       [
         zone_id     || null, zone_id     || null,
         bounds_id   || null, bounds_id   || null,
@@ -136,6 +139,26 @@ exports.dispatchDriver = async (req, res) => {
       ]
     );
 
+    // Promote the next QUEUED driver to WAITING
+    const [nextInLine] = await conn.query(
+      `SELECT queue_id FROM vehicle_queue
+        WHERE queue_status = 'QUEUED'
+          AND zone_id = ?
+          AND bounds_id = ?
+        ORDER BY scheduled_dispatch_at ASC, joined_at ASC
+        LIMIT 1`,
+      [q.zone_id, q.bounds_id]
+    );
+
+    if (nextInLine.length > 0) {
+      await conn.query(
+        `UPDATE vehicle_queue
+            SET queue_status = 'WAITING'
+          WHERE queue_id = ?`,
+        [nextInLine[0].queue_id]
+      );
+    }
+
     await conn.commit();
     conn.release();
 
@@ -144,6 +167,7 @@ exports.dispatchDriver = async (req, res) => {
       message: "Driver dispatched successfully.",
       departure_id: logResult.insertId,
       queue_id,
+      promoted_queue_id: nextInLine.length > 0 ? nextInLine[0].queue_id : null
     });
   } catch (err) {
     await conn.rollback();

@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const SOCKET_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:4570'
-    : 'https://ptamanagement-production.up.railway.app';
+    : 'https://mobile-backend-application.up.railway.app';
 
   const GET_QUEUE_API = '/queue';
   const DISPATCH_API  = '/queue/dispatchDriver';
@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let routeLine           = null;
 
   let currentTerminalId = null;
-  let queueCache        = new Map();
+  let queueCache        = []; // 👈 CHANGED: Array instead of Map
   let socket            = null;
 
   // ==================================================
@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!terminalId) {
       clearMap();
       currentTerminalId = null;
-      queueCache.clear();
+      queueCache = []; // 👈 CHANGED
       renderQueue();
       return;
     }
@@ -161,7 +161,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       map.setView([lat, lng], 14);
     }
 
-    // >>> QUEUE: load this terminal's queue
     currentTerminalId = terminalId;
     await loadQueue(terminalId);
   });
@@ -228,7 +227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==================================================
   async function loadQueue(terminalId) {
     if (!terminalId) {
-      queueCache.clear();
+      queueCache = []; // 👈 CHANGED
       renderQueue();
       return;
     }
@@ -244,14 +243,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(result.message || 'Failed to load queue');
       }
 
-      queueCache.clear();
-      (result.data || []).forEach(r => queueCache.set(r.queue_id, r));
+      // 👇 CHANGED: Simply assign the array directly
+      queueCache = result.data || [];
       renderQueue();
 
     } catch (err) {
       console.error('[queue] loadQueue error:', err);
       if (queueStatusText) queueStatusText.textContent = 'Failed to load queue';
-      queueCache.clear();
+      queueCache = []; // 👈 CHANGED
       renderQueue();
     }
   }
@@ -259,12 +258,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderQueue() {
     if (!queueList) return;
 
-    const rows = Array.from(queueCache.values())
-      .sort((a, b) => {
-        const aT = new Date(a.scheduled_dispatch_at || a.joined_at).getTime();
-        const bT = new Date(b.scheduled_dispatch_at || b.joined_at).getTime();
-        return aT - bT;
-      });
+    // 👇 CHANGED: Use the array directly (no more .values())
+    const rows = [...queueCache].sort((a, b) => {
+      const aT = new Date(a.scheduled_dispatch_at || a.joined_at).getTime();
+      const bT = new Date(b.scheduled_dispatch_at || b.joined_at).getTime();
+      return aT - bT;
+    });
 
     if (queueCountBadge) queueCountBadge.textContent = rows.length;
     queueList.innerHTML = '';
@@ -292,55 +291,58 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function buildRow(r, position) {
-  const el = document.createElement('div');
-  el.className = 'queue-row';
-  el.dataset.queueId = r.queue_id;
+    const el = document.createElement('div');
+    el.className = 'queue-row';
+    el.dataset.queueId = r.queue_id;
 
-  const name = [r.first_name, r.middle_name, r.last_name]
-    .filter(Boolean)
-    .join(' ') || 'Unknown';
+    const name = [r.first_name, r.middle_name, r.last_name]
+      .filter(Boolean)
+      .join(' ') || 'Unknown';
 
-  const inside  = r.driver_status === 'ACTIVE';
- const isFront = r.queue_status === 'WAITING';
+    const inside  = r.driver_status === 'ACTIVE';
+    const isFront = r.queue_status === 'WAITING';
 
-  // Status label + class
-  let statusLabel = 'Waiting';
-  let statusClass = 'status-waiting';
+    let statusLabel = 'Queued';
+    let statusClass = 'status-waiting';
 
-  if (isFront && inside) {
-    statusLabel = 'Next to depart';
-    statusClass = 'status-ready';
-  } else if (isFront && !inside) {
-    statusLabel = 'Departing…';
-    statusClass = 'status-departing';
-  } else if (!inside) {
-    statusLabel = 'Moved out';
-    statusClass = 'status-transit';
+    if (isFront && inside) {
+      statusLabel = 'Next to depart';
+      statusClass = 'status-ready';
+    } else if (isFront && !inside) {
+      // 👇 NOTE: If the driver is outside the polygon, it says "Departing...".
+      // You might want to change this to "Outside Zone" or "In Transit" 
+      // if that's not the intended meaning.
+      statusLabel = 'Departing…';
+      statusClass = 'status-departing';
+    } else if (!inside) {
+      statusLabel = 'Moved out';
+      statusClass = 'status-transit';
+    }
+
+    el.innerHTML = `
+      <div class="col-pos">${position}${isFront ? '' : ''}</div>
+      <div class="col-driver-name">
+        <span class="driver-status-dot ${inside ? 'in' : 'out'}"
+              title="${inside ? 'Inside polygon' : 'Outside polygon'}"></span>
+        <span>${name}</span>
+      </div>
+      <div class="col-vehicle">${r.plate_number || '—'}</div>
+      <div class="col-slot">
+        <div class="slot-time">${slotRange(r.scheduled_dispatch_at)}</div>
+        <div class="slot-hint">${timeUntil(r.scheduled_dispatch_at)}</div>
+      </div>
+      <div class="col-status ${statusClass}">${statusLabel}</div>
+    `;
+
+    return el;
   }
-
-  el.innerHTML = `
-    <div class="col-pos">${position}${isFront ? ' 👑' : ''}</div>
-    <div class="col-driver-name">
-      <span class="driver-status-dot ${inside ? 'in' : 'out'}"
-            title="${inside ? 'Inside polygon' : 'Outside polygon'}"></span>
-      <span>${name}</span>
-    </div>
-    <div class="col-vehicle">${r.plate_number || '—'}</div>
-    <div class="col-slot">
-      <div class="slot-time">${slotRange(r.scheduled_dispatch_at)}</div>
-      <div class="slot-hint">${timeUntil(r.scheduled_dispatch_at)}</div>
-    </div>
-    <div class="col-status ${statusClass}">${statusLabel}</div>
-  `;
-
-  return el;
-}
 
   // ==================================================
   // QUEUE — DISPATCH
   // ==================================================
   async function dispatchVehicle(queueId) {
-    const row = queueCache.get(queueId);
+    // 👇 CHANGED: Find the row in the array instead of Map.get()
+    const row = queueCache.find(r => r.queue_id === queueId);
     if (!row) return;
 
     const name = [row.first_name, row.last_name].filter(Boolean).join(' ');
@@ -370,7 +372,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(result.message || 'Dispatch failed');
       }
 
-      queueCache.delete(queueId);
+      // 👇 CHANGED: Filter the array to remove the dispatched driver
+      queueCache = queueCache.filter(r => r.queue_id !== queueId);
       renderQueue();
 
     } catch (err) {
@@ -413,16 +416,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     socket.on('queue:driver_dispatched', ({ queue_id }) => {
-      queueCache.delete(queue_id);
+      // 👇 CHANGED: Filter the array
+      queueCache = queueCache.filter(r => r.queue_id !== queue_id);
       renderQueue();
     });
 
     socket.on('queue:driver_left', ({ driverId }) => {
-      for (const [id, row] of queueCache) {
-        if (row.driver_info_id === driverId) {
-          queueCache.delete(id);
-        }
-      }
+      // 👇 CHANGED: Filter the array based on driver_info_id
+      queueCache = queueCache.filter(r => r.driver_info_id !== driverId);
       renderQueue();
     });
   }
@@ -433,7 +434,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSocket();
 
   setInterval(() => {
-    if (queueCache.size > 0) renderQueue();
+    if (queueCache.length > 0) renderQueue();
   }, 30000);
 
 });
