@@ -37,6 +37,43 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.classList.toggle('ok', ok);
   }
 
+  // ---------- date validation ----------
+  // Limits what the calendar picker allows (no future dates, "To" not before "From")
+  function applyDateLimits() {
+    const t = todayStr();
+    toInput.max   = t;                                                   // no future dates
+    fromInput.max = (toInput.value && toInput.value < t) ? toInput.value : t;
+    toInput.min   = fromInput.value || '';                               // "To" can't be before "From"
+  }
+
+  // Returns an error message, or '' if the dates are valid
+  function validateDates() {
+    const from = fromInput.value, to = toInput.value, t = todayStr();
+    fromInput.classList.remove('invalid');
+    toInput.classList.remove('invalid');
+
+    if (!from || !to) return 'Please pick both dates.';
+    if (from > t) { fromInput.classList.add('invalid'); return '"From" date cannot be in the future.'; }
+    if (to > t)   { toInput.classList.add('invalid');   return '"To" date cannot be in the future.'; }
+    if (to < from) {
+      toInput.classList.add('invalid');
+      return '"To" date cannot be earlier than the "From" date.';
+    }
+    return '';
+  }
+
+  // Applies limits, shows the error (if any), and enables/disables the Download button
+  function checkDates() {
+    applyDateLimits();
+    const err = validateDates();
+    setStatus(err);
+    genBtn.disabled = !!err;
+    return !err;
+  }
+
+  fromInput.addEventListener('change', checkDates);
+  toInput.addEventListener('change', checkDates);
+
   // ---------- saved header ----------
   function loadHeader() {
     try {
@@ -73,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!fromInput.value) fromInput.value = t;
     if (!toInput.value)   toInput.value   = t;
     loadHeader();
-    setStatus('');
+    checkDates();
     modal.style.display = 'flex';
   }
   function closeModal() { modal.style.display = 'none'; }
@@ -230,14 +267,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---------- generate ----------
   genBtn.addEventListener('click', async () => {
+    // Re-validate right before generating (covers manually typed dates)
+    if (!checkDates()) return;
+
     const from = fromInput.value;
     const to   = toInput.value;
     const format = document.querySelector('input[name="reportFormat"]:checked').value;
     const terminalId = terminalSel.value;
     const terminalName = terminalSel.options[terminalSel.selectedIndex].textContent;
-
-    if (!from || !to)  return setStatus('Please pick both dates.');
-    if (from > to)     return setStatus('"From" date must be before "To" date.');
 
     saveHeader();
     genBtn.disabled = true;
@@ -270,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('[departReport]', err);
       setStatus(err.message || 'Failed to generate report.');
     } finally {
-      genBtn.disabled = false;
+      genBtn.disabled = !!validateDates();
     }
   });
 });
