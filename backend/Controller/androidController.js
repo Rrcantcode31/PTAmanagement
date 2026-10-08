@@ -6,12 +6,13 @@ import jwt from "jsonwebtoken";
 // Login for driver and commuter
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // 'identifier' can be either an email address or a contact number
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and password",
+        message: "Please provide email/contact number and password",
       });
     }
 
@@ -27,8 +28,8 @@ export const login = async (req, res) => {
        FROM userauth u
        JOIN roles r ON u.role_id = r.role_id
        LEFT JOIN user_info ui ON u.user_id = ui.user_id
-       WHERE u.email = ?`,
-      [email]
+       WHERE u.email = ? OR ui.contact_number = ?`,
+      [identifier, identifier] // Passed twice to check both email and contact_number
     );
 
     let account = null;
@@ -36,7 +37,6 @@ export const login = async (req, res) => {
     if (users.length > 0) {
       account = users[0];
     } else {
-
       const [drivers] = await db.promise().query(
           `SELECT 
               d.driver_id AS id,
@@ -54,8 +54,8 @@ export const login = async (req, res) => {
           JOIN roles r ON d.role_id = r.role_id
           LEFT JOIN driver_info di         ON d.driver_id    = di.driver_id
           LEFT JOIN terminal_locations tl  ON di.terminal_id = tl.terminal_id
-          WHERE d.email = ?`,
-          [email]
+          WHERE d.email = ? OR di.contact_number = ?`,
+          [identifier, identifier] // Passed twice to check both email and contact_number
         );
 
       if (drivers.length > 0) {
@@ -67,7 +67,7 @@ export const login = async (req, res) => {
     if (!account) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Invalid email/contact number or password",
       });
     }
 
@@ -80,7 +80,7 @@ export const login = async (req, res) => {
     if (!isValidPassword) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Invalid email/contact number or password",
       });
     }
 
@@ -139,10 +139,18 @@ export const signup = async (req, res) => {
     } = req.body;
 
     // ---------- 1. Required fields ----------
-    if (!email || !password || !firstName || !lastName || !fareCategory) {
+    if (!password || !firstName || !lastName || !fareCategory) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email, password, first name, last name, and fare category",
+        message: "Please provide password, first name, last name, and fare category",
+      });
+    }
+
+    // Ensure at least one of email or contact number is provided
+    if (!email && !contactNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide either an email or a contact number",
       });
     }
 
@@ -173,16 +181,32 @@ export const signup = async (req, res) => {
     }
 
     // ---------- 3. Duplicate check ----------
-    const [existingUsers] = await db.promise().query(
-      "SELECT user_id FROM userauth WHERE email = ?",
-      [email]
-    );
+    // Check email if provided
+    if (email) {
+      const [existingUsers] = await db.promise().query(
+        "SELECT user_id FROM userauth WHERE email = ?",
+        [email]
+      );
+      if (existingUsers.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Email already registered",
+        });
+      }
+    }
 
-    if (existingUsers.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already registered",
-      });
+    // Check contact number if provided
+    if (contactNumber) {
+      const [existingContacts] = await db.promise().query(
+        "SELECT user_id FROM user_info WHERE contact_number = ?",
+        [contactNumber]
+      );
+      if (existingContacts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Contact number already registered",
+        });
+      }
     }
 
     // ---------- 4. Hash password ----------
@@ -196,7 +220,7 @@ export const signup = async (req, res) => {
       const [userResult] = await connection.query(
         `INSERT INTO userauth (email, password, role_id, created_at)
          VALUES (?, ?, ?, NOW())`,
-        [email, hashedPassword, role_id]
+        [email || null, hashedPassword, role_id]
       );
 
       const userId = userResult.insertId;
@@ -235,7 +259,7 @@ export const signup = async (req, res) => {
         token,
         user: {
           id: userId,
-          email,
+          email: email || null,
           firstName,
           lastName,
           role: role_name,
@@ -258,7 +282,7 @@ export const signup = async (req, res) => {
       error: error.message,
     });
   }
-};
+}
 
 // UPDATE USER (commuter)
 export const updateUser = async (req, res) => {

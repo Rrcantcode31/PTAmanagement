@@ -37,13 +37,6 @@ const FARE_OPTIONS = [
 // Validation helpers
 // ============================================================
 const CONTACT_DIGITS = 11;
-const GMAIL_DOMAIN = "gmail.com";
-
-const GMAIL_TYPOS = [
-  "gmial.com", "gmai.com", "gmal.com", "gamil.com", "gnail.com",
-  "gmaill.com", "gmail.co", "gmail.con", "gmail.comm", "gmailcom",
-  "gmail.cm", "gmail.om", "gmail.com.ph", "gmail.co.uk",
-];
 
 /** Strips everything that isn't a digit and hard-stops at 11 digits. */
 function sanitizeContactNumber(raw: string): string {
@@ -51,13 +44,18 @@ function sanitizeContactNumber(raw: string): string {
 }
 
 /**
- * Contact number is OPTIONAL.
- * - Empty is fine.
+ * Contact number is OPTIONAL if email is provided.
+ * - Empty is fine, UNLESS email is also empty.
  * - If filled in, it must be exactly 11 digits.
  */
-function validateContactNumber(raw: string): string | null {
+function validateContactNumber(raw: string, email: string): string | null {
   const value = (raw || "").trim();
-  if (!value) return null; // optional → no error
+  const emailValue = (email || "").trim();
+
+  if (!value) {
+    if (!emailValue) return "Please provide either an email or a contact number.";
+    return null; // optional if email is provided
+  }
 
   if (!/^\d+$/.test(value)) return "Contact number must contain digits only.";
   if (value.length !== CONTACT_DIGITS) {
@@ -66,39 +64,30 @@ function validateContactNumber(raw: string): string | null {
   return null;
 }
 
-function validateEmail(raw: string): string | null {
+function validateEmail(raw: string, contactNumber: string): string | null {
   const email = (raw || "").trim();
+  const contact = (contactNumber || "").trim();
 
-  if (!email) return "Email is required.";
+  if (!email) {
+    if (!contact) return "Please provide either an email or a contact number.";
+    return null; // optional if contact number is provided
+  }
+  
   if (/\s/.test(email)) return "Email cannot contain spaces.";
   if (email.includes("..")) return "Email cannot contain two dots in a row.";
 
   const atCount = (email.match(/@/g) || []).length;
-  if (atCount === 0) return "Email is incomplete — it must end with @gmail.com.";
+  if (atCount === 0) return "Email is incomplete — it must contain an @ symbol.";
   if (atCount > 1) return "Email can only contain one @ symbol.";
 
   const [localPart, domainPart] = email.split("@");
 
-  if (!localPart) return "Enter your username before @gmail.com.";
-  if (!domainPart) return "Email is incomplete — add gmail.com after the @.";
+  if (!localPart) return "Enter your username before the @ symbol.";
+  if (!domainPart) return "Email is incomplete — add a domain after the @.";
+  if (!domainPart.includes(".")) return "Email domain is invalid.";
 
-  const local = localPart;
-  const domain = domainPart.toLowerCase().replace(/\.+$/, "");
-
-  if (domain !== GMAIL_DOMAIN) {
-    if (
-      GMAIL_TYPOS.includes(domain) ||
-      domain.includes("gmail") ||
-      domain.startsWith("gmai") ||
-      domain.startsWith("gmal")
-    ) {
-      return "Did you mean @gmail.com? Please check the spelling.";
-    }
-    return "Only @gmail.com email addresses are accepted.";
-  }
-
-  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?$/.test(local)) {
-    return "That Gmail username is not valid.";
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?$/.test(localPart)) {
+    return "That email username is not valid.";
   }
 
   return null;
@@ -160,24 +149,19 @@ export default function Register() {
   if (!fontsLoaded) return null;
 
   const handleRegister = async () => {
-    // Required field check (contact number NOT required)
-    if (
-      !email.trim() ||
-      !password.trim() ||
-      !firstName.trim() ||
-      !lastName.trim()
-    ) {
+    // Required field check (email and contact number are mutually required)
+    if (!password.trim() || !firstName.trim() || !lastName.trim()) {
       showModal(
         "error",
         "Missing details",
-        "Please fill in your email, password, first name, and last name."
+        "Please fill in your password, first name, and last name."
       );
       return;
     }
 
-    // Email + contact validation
-    const emailError   = validateEmail(email);
-    const contactError = validateContactNumber(contactNumber);
+    // Email + contact validation (at least one required)
+    const emailError   = validateEmail(email, contactNumber);
+    const contactError = validateContactNumber(contactNumber, email);
 
     if (emailError || contactError) {
       setFieldErrors({
@@ -215,12 +199,12 @@ export default function Register() {
 
     try {
       const res = await axios.post(`${API_URL}/api/auth/signup`, {
-        email: email.trim().toLowerCase(),
+        email: email.trim().toLowerCase() || null, // Send null if empty
         password,
         firstName: firstName.trim(),
         middleName: middleName.trim(),
         lastName: lastName.trim(),
-        contactNumber: contactNumber.trim() || null,
+        contactNumber: contactNumber.trim() || null, // Send null if empty
         fareCategory,
       });
 
@@ -294,7 +278,7 @@ export default function Register() {
                 style={styles.inputIcon}
               />
               <TextInput
-                placeholder="Email"
+                placeholder="Email (optional if contact is provided)"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
                 onChangeText={(v) => {
@@ -306,7 +290,7 @@ export default function Register() {
                 onBlur={() =>
                   setFieldErrors((e) => ({
                     ...e,
-                    email: validateEmail(email) || undefined,
+                    email: validateEmail(email, contactNumber) || undefined,
                   }))
                 }
                 value={email}
@@ -321,7 +305,9 @@ export default function Register() {
                 <Text style={styles.fieldHintError}>{fieldErrors.email}</Text>
               </View>
             ) : (
-              <Text style={styles.fieldHint}>Must be a valid @gmail.com address</Text>
+              <Text style={styles.fieldHint}>
+                If email is unavailable, you can proceed to use a contact number.
+              </Text>
             )}
 
             {/* ===== PASSWORD ===== */}
@@ -457,7 +443,7 @@ export default function Register() {
               />
             </View>
 
-            {/* ===== CONTACT NUMBER (optional, digits only, max 11) ===== */}
+            {/* ===== CONTACT NUMBER (optional if email is provided) ===== */}
             <View
               style={[
                 styles.inputWrapper,
@@ -471,7 +457,7 @@ export default function Register() {
                 style={styles.inputIcon}
               />
               <TextInput
-                placeholder="Contact Number (optional)"
+                placeholder="Contact Number (optional if email is provided)"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
                 onChangeText={(v) => {
@@ -484,7 +470,7 @@ export default function Register() {
                   setFieldErrors((e) => ({
                     ...e,
                     contactNumber:
-                      validateContactNumber(contactNumber) || undefined,
+                      validateContactNumber(contactNumber, email) || undefined,
                   }))
                 }
                 value={contactNumber}

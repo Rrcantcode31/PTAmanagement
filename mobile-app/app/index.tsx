@@ -28,7 +28,8 @@ type ModalState = {
 };
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  // Renamed 'email' to 'identifier' to reflect that it can be an email OR a contact number
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const { login, user, isLoading } = useAuth();
@@ -76,18 +77,19 @@ export default function Login() {
   }
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
+    // Check if identifier is provided
+    if (!identifier.trim() || !password.trim()) {
       showModal(
         "error",
         "Missing details",
-        "Please enter both your email and password."
+        "Please enter both your email/contact number and password."
       );
       return;
     }
 
     try {
       const res = await axios.post(`${API_URL}/api/auth/login`, {
-        email: email.trim(),
+        identifier: identifier.trim(), // Send 'identifier' instead of 'email'
         password,
       });
 
@@ -156,7 +158,7 @@ export default function Login() {
           <BlurView intensity={35} tint="light" style={styles.loginCard}>
             <Text style={styles.cardTitle}>Login</Text>
 
-            {/* ===== USERNAME INPUT ===== */}
+            {/* ===== IDENTIFIER INPUT (Email or Contact Number) ===== */}
             <View style={styles.inputWrapper}>
               <Ionicons
                 name="person-outline"
@@ -165,16 +167,18 @@ export default function Login() {
                 style={styles.inputIcon}
               />
               <TextInput
-                placeholder=" Email "
+                placeholder="Email or Contact Number"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
-                onChangeText={setEmail}
-                value={email}
+                onChangeText={setIdentifier}
+                value={identifier}
                 autoCapitalize="none"
-                keyboardType="email-address"
+                keyboardType="default" // Changed to default to allow both @ and numbers
                 autoCorrect={false}
               />
             </View>
+            
+
 
             {/* ===== PASSWORD INPUT ===== */}
             <View style={styles.inputWrapper}>
@@ -368,7 +372,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.4)",
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 8, // reduced slightly to accommodate helper text
   },
 
   inputIcon: { marginRight: 12 },

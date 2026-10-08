@@ -1,8 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Bump this whenever the shape of `User` changes.
-// Old cached users with a different version get cleared on next app open.
 const AUTH_VERSION = '3';
 
 type User = {
