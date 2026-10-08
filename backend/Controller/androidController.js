@@ -1079,7 +1079,6 @@ export const getDriverStats = async (req, res) => {
   }
 };
 
-
 // GET driver's departure logs (today by default)
 export const getDriverDepartures = async (req, res) => {
   try {

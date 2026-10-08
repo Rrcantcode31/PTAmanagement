@@ -90,49 +90,45 @@ export function registerDriverHandlers(io, socket) {
       const sustainedOutside = sustainedOutsideMs >= REQUIRED_OUTSIDE_MS;
 
       // ---------- 5. Debounced status decision ----------
-      // OUTSIDE                     → INACTIVE immediately
-      // INSIDE + sustained          → ACTIVE
-      // INSIDE + previously ACTIVE  → stay ACTIVE (avoids false justLeft after restart)
-      // INSIDE + not sustained      → hold previous status (no flicker)
       let newStatus;
       if (!insideZone) {
         newStatus = "INACTIVE";
       } else if (sustainedInside || previousStatus === "ACTIVE") {
         newStatus = "ACTIVE";
-      } else {  
+      } else {
         newStatus = "INACTIVE";
       }
 
       if (newStatus !== previousStatus) {
-          await db.promise().query(
-            `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
-            [newStatus, driverId]
-          );
-        }
+        await db.promise().query(
+          `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
+          [newStatus, driverId]
+        );
+      }
 
-        socket.emit("driver:status", {
-          status: newStatus,
-          insideZone,
-          zone: insideZone ? matchedZone.zone_name : null,
-          latitude,
-          longitude,
-        });
+      socket.emit("driver:status", {
+        status: newStatus,
+        insideZone,
+        zone: insideZone ? matchedZone.zone_name : null,
+        latitude,
+        longitude,
+      });
 
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
-      const justLeft =
-        previousStatus === "ACTIVE" &&
-        newStatus === "INACTIVE" &&
-        sustainedOutside;
+
+      // ==================================================
+      // 👇 THE FIX: justLeft now only depends on sustainedOutside.
+      // The WAITING check below handles filtering.
+      // ==================================================
+      const justLeft = sustainedOutside;
 
       // ==================================================
       // ENTER: auto-join the queue
       // ==================================================
       if (justEntered && vehicleId) {
 
-        // Reset the outside streak — driver is back inside
         outsideSince.delete(driverId);
 
-        // Cancel any pending departure — they came back
         if (pendingDepartureTimers.has(driverId)) {
           clearTimeout(pendingDepartureTimers.get(driverId));
           pendingDepartureTimers.delete(driverId);
@@ -269,10 +265,19 @@ export function registerDriverHandlers(io, socket) {
         if (qRows.length > 0) {
           const q = qRows[0];
 
-          // Replace any existing timer
+          // 👇 FIX: Don't restart the timer on every GPS ping
           if (pendingDepartureTimers.has(driverId)) {
-            clearTimeout(pendingDepartureTimers.get(driverId));
+            console.log(
+              `[queue] driver ${driverId} still outside ` +
+              `(${Math.round(sustainedOutsideMs / 1000)}s) — timer already running`
+            );
+            return;
           }
+
+          console.log(
+            `[queue] driver ${driverId} has been outside for ` +
+            `${Math.round(sustainedOutsideMs / 1000)}s — starting ${DEPARTURE_GRACE_SECONDS}s grace period`
+          );
 
           const timer = setTimeout(async () => {
             const conn = await db.promise().getConnection();
@@ -379,9 +384,6 @@ export function registerDriverHandlers(io, socket) {
           }, DEPARTURE_GRACE_SECONDS * 1000);
 
           pendingDepartureTimers.set(driverId, timer);
-          console.log(
-            `[queue] driver ${driverId} (#1) left — dispatching in ${DEPARTURE_GRACE_SECONDS}s`
-          );
         } else {
           console.log(`[queue] driver ${driverId} left but was not WAITING — no dispatch`);
         }
