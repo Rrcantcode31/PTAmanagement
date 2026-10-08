@@ -99,16 +99,24 @@ export function registerDriverHandlers(io, socket) {
         newStatus = "INACTIVE";
       } else if (sustainedInside || previousStatus === "ACTIVE") {
         newStatus = "ACTIVE";
-      } else {
+      } else {  
         newStatus = "INACTIVE";
       }
 
       if (newStatus !== previousStatus) {
-        await db.promise().query(
-          `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
-          [newStatus, driverId]
-        );
-      }
+          await db.promise().query(
+            `UPDATE driverauth SET status = ? WHERE driver_id = ?`,
+            [newStatus, driverId]
+          );
+        }
+
+        socket.emit("driver:status", {
+          status: newStatus,
+          insideZone,
+          zone: insideZone ? matchedZone.zone_name : null,
+          latitude,
+          longitude,
+        });
 
       const justEntered = previousStatus !== "ACTIVE" && newStatus === "ACTIVE";
       const justLeft =
