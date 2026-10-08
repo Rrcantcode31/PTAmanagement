@@ -109,13 +109,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-        function showPrompt(message) {
-          tbody.innerHTML = '';
-          emptyState.style.display = 'block';   // ← this overrides your CSS entirely
-          emptyState.querySelector('p').textContent = message;
-          totalCount.textContent = '0 total departures';
-      }
-
   // ==================================================
   // Fetch logs
   // ==================================================
@@ -128,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Only load when a terminal is selected.
     if (!terminalId) {
-      showPrompt();
+      showPrompt('Select a terminal to view departure logs.');
       return;
     }
 
@@ -174,6 +167,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       (data.terminals || []).forEach(function (t) {
+        // 👇 ADDED: Skip Koronadal City since it's the main hub
+        if (t.terminal_name && t.terminal_name.toLowerCase().includes('koronadal')) {
+          return;
+        }
+
         const opt = document.createElement('option');
         opt.value = t.terminal_id;
         opt.textContent = t.terminal_name;

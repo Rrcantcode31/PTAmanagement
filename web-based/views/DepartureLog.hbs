@@ -8,7 +8,10 @@
     <link rel="stylesheet" href="/css/departure.css" />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
+    <script defer src="/js/departureReport.js"></script>
     <script defer src="/js/departLogs.js"></script>
 </head>
 <body>
@@ -64,6 +67,9 @@
                             <option value="">Select Terminal</option>
                         </select>
                          <input type="date" id="departure_date" />
+                        <button type="button" id="openReportBtn" class="report-btn">
+                            <i class="fas fa-file-export"></i> Generate Report
+                        </button>
                     </div>
                 </div>
 
@@ -110,5 +116,55 @@
 
         </main>
     </div>
+
+            <div class="modal-overlay" id="reportModal" style="display:none;">
+        <div class="modal-box">
+            <div class="modal-head">
+            <h3><i class="fas fa-file-alt"></i> Generate Departure Report</h3>
+            <button type="button" id="closeReportBtn" class="modal-close">&times;</button>
+            </div>
+
+            <div class="modal-body">
+            <p class="modal-terminal">Terminal: <strong id="reportTerminalName">—</strong></p>
+
+            <div class="form-row">
+                <label>From
+                <input type="date" id="reportFrom" />
+                </label>
+                <label>To
+                <input type="date" id="reportTo" />
+                </label>
+            </div>
+
+            <div class="form-group">
+                <span class="form-label">Format</span>
+                <label class="radio"><input type="radio" name="reportFormat" value="pdf" checked> PDF</label>
+                <label class="radio"><input type="radio" name="reportFormat" value="docx"> Word (.docx)</label>
+            </div>
+
+            <div class="form-group">
+                <label class="radio">
+                <input type="checkbox" id="includeHeader" checked> Include document header
+                </label>
+                <div id="headerFields">
+                <input type="text" id="hdrOrg"      placeholder="Organization / Company name" />
+                <input type="text" id="hdrTitle"    placeholder="Report title (e.g. Departure Logs Report)" />
+                <input type="text" id="hdrSubtitle" placeholder="Address / subtitle (optional)" />
+                <small>Saved automatically, so you only set this once.</small>
+                </div>
+            </div>
+
+            <p id="reportStatus" class="report-status"></p>
+            </div>
+
+            <div class="modal-foot">
+            <button type="button" id="cancelReportBtn" class="btn-secondary">Cancel</button>
+            <button type="button" id="generateReportBtn" class="btn-primary">
+                <i class="fas fa-download"></i> Download
+            </button>
+            </div>
+        </div>
+        </div>
+
 </body>
 </html>

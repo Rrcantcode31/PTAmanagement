@@ -1,3 +1,57 @@
+(function setupMobileSidebar() {
+  const init = () => {
+    const sidebar  = document.getElementById('sidebar');
+    const overlay  = document.getElementById('sidebar-overlay');
+    const openBtn  = document.getElementById('sidebar-toggle');
+    const closeBtn = document.getElementById('sidebar-close');
+
+    if (!sidebar || !overlay) return; // sidebar not present on this page
+
+    const open = () => {
+      sidebar.classList.add('open');
+      overlay.classList.add('open');
+      document.body.classList.add('no-scroll');
+    };
+
+    const close = () => {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+      document.body.classList.remove('no-scroll');
+    };
+
+    if (openBtn)  openBtn.addEventListener('click', open);
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', close);
+
+    // Close on Escape
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sidebar.classList.contains('open')) close();
+    });
+
+    // Close when returning to desktop widths
+    let lastWidth = window.innerWidth;
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      // Only act if we crossed the breakpoint
+      if (lastWidth <= 900 && w > 900) close();
+      lastWidth = w;
+    });
+
+    // Close when a nav link is tapped (so the drawer slides away)
+    sidebar.querySelectorAll('a.nav-btn, a.upload-btn').forEach((a) => {
+      a.addEventListener('click', () => {
+        if (window.innerWidth <= 900) close();
+      });
+    });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
 // Start fetching terminals immediately, in parallel with DOM/map setup.
 const terminalsPromise = fetch('/terminals')
   .then((r) => {
@@ -86,7 +140,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================================
   const southCotabatoBounds = L.latLngBounds([[5.95, 124.55], [6.65, 125.2]]);
 
-  // One shared canvas renderer: draws all dots on a single <canvas>.
   const canvasRenderer = L.canvas({ padding: 0.5, tolerance: 6 });
 
   const map = L.map('map', {
@@ -100,9 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   map.fitBounds(southCotabatoBounds, { padding: [10, 10] });
 
-  // Shared tile options. `bounds` is padded by 100% so the whole visible
-  // viewport (which can be wider than the province) always gets tiles,
-  // while still avoiding downloads for the rest of the world.
   const tileBounds = southCotabatoBounds.pad(1);
 
   const tileCommon = {
@@ -116,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const defaultLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     ...tileCommon,
     maxZoom: 20.5,
-    maxNativeZoom: 19, // OSM has no tiles beyond 19 – upscale instead of 404s
+    maxNativeZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   });
 
@@ -146,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ==========================================================
-  // ICONS (inline SVG – zero network requests)
+  // ICONS
   // ==========================================================
   const pinSvg = (fill, w, h) => `
     <svg width="${w}" height="${h}" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">
@@ -173,9 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ==========================================================
   // MARKER FACTORY
-  // Highlighted terminal = pin marker. Everything else = canvas dot.
   // ==========================================================
-  // FeatureGroup (not LayerGroup): it propagates child events (click) to the group.
   const markerGroup = L.featureGroup().addTo(map);
 
   function createMarker({ terminal_id, terminal_name, terminal_address, latitude, longitude }) {
@@ -207,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return marker;
   }
 
-  // Swap marker type if highlight status changed (pin <-> dot) after an edit.
   function replaceMarker(oldMarker, data) {
     markerGroup.removeLayer(oldMarker);
     const fresh = createMarker(data);
@@ -352,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================================
-  // CLICK HANDLING – one delegated handler for ALL markers
+  // CLICK HANDLING
   // ==========================================================
   markerGroup.on('click', async (e) => {
     const marker = e.layer;
@@ -364,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ==========================================================
-  // LOAD TERMINALS (cached render first, then fresh data)
+  // LOAD TERMINALS
   // ==========================================================
   const CACHE_KEY = 'terminals_cache_v1';
 
@@ -394,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let cachedRaw = null;
   try {
     cachedRaw = sessionStorage.getItem(CACHE_KEY);
-    if (cachedRaw) renderTerminals(JSON.parse(cachedRaw)); // instant on repeat visits
+    if (cachedRaw) renderTerminals(JSON.parse(cachedRaw));
   } catch (_) { cachedRaw = null; }
 
   terminalsPromise

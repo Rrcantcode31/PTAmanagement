@@ -139,7 +139,8 @@
         /* The gradient header shrinks to fill the rest of the row */
         .dashboard-row .dashboard-header {
           flex: 1;
-          margin-bottom: 0;                  
+          margin-bottom: 0;         
+                   
         }
 
         .admin-profile-avatar {

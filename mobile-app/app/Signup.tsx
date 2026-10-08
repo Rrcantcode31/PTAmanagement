@@ -33,6 +33,77 @@ const FARE_OPTIONS = [
   { label: "Senior",  value: "senior",  icon: "person-circle-outline" },
 ] as const;
 
+// ============================================================
+// Validation helpers
+// ============================================================
+const CONTACT_DIGITS = 11;
+const GMAIL_DOMAIN = "gmail.com";
+
+const GMAIL_TYPOS = [
+  "gmial.com", "gmai.com", "gmal.com", "gamil.com", "gnail.com",
+  "gmaill.com", "gmail.co", "gmail.con", "gmail.comm", "gmailcom",
+  "gmail.cm", "gmail.om", "gmail.com.ph", "gmail.co.uk",
+];
+
+/** Strips everything that isn't a digit and hard-stops at 11 digits. */
+function sanitizeContactNumber(raw: string): string {
+  return (raw || "").replace(/[^0-9]/g, "").slice(0, CONTACT_DIGITS);
+}
+
+/**
+ * Contact number is OPTIONAL.
+ * - Empty is fine.
+ * - If filled in, it must be exactly 11 digits.
+ */
+function validateContactNumber(raw: string): string | null {
+  const value = (raw || "").trim();
+  if (!value) return null; // optional → no error
+
+  if (!/^\d+$/.test(value)) return "Contact number must contain digits only.";
+  if (value.length !== CONTACT_DIGITS) {
+    return `Contact number must be exactly ${CONTACT_DIGITS} digits.`;
+  }
+  return null;
+}
+
+function validateEmail(raw: string): string | null {
+  const email = (raw || "").trim();
+
+  if (!email) return "Email is required.";
+  if (/\s/.test(email)) return "Email cannot contain spaces.";
+  if (email.includes("..")) return "Email cannot contain two dots in a row.";
+
+  const atCount = (email.match(/@/g) || []).length;
+  if (atCount === 0) return "Email is incomplete — it must end with @gmail.com.";
+  if (atCount > 1) return "Email can only contain one @ symbol.";
+
+  const [localPart, domainPart] = email.split("@");
+
+  if (!localPart) return "Enter your username before @gmail.com.";
+  if (!domainPart) return "Email is incomplete — add gmail.com after the @.";
+
+  const local = localPart;
+  const domain = domainPart.toLowerCase().replace(/\.+$/, "");
+
+  if (domain !== GMAIL_DOMAIN) {
+    if (
+      GMAIL_TYPOS.includes(domain) ||
+      domain.includes("gmail") ||
+      domain.startsWith("gmai") ||
+      domain.startsWith("gmal")
+    ) {
+      return "Did you mean @gmail.com? Please check the spelling.";
+    }
+    return "Only @gmail.com email addresses are accepted.";
+  }
+
+  if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?$/.test(local)) {
+    return "That Gmail username is not valid.";
+  }
+
+  return null;
+}
+
 export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +115,11 @@ export default function Register() {
   const [fareCategory, setFareCategory] = useState("regular");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    contactNumber?: string;
+  }>({});
 
   const [modal, setModal] = useState<ModalState>({
     visible: false,
@@ -84,7 +160,7 @@ export default function Register() {
   if (!fontsLoaded) return null;
 
   const handleRegister = async () => {
-    // Required field check
+    // Required field check (contact number NOT required)
     if (
       !email.trim() ||
       !password.trim() ||
@@ -98,6 +174,24 @@ export default function Register() {
       );
       return;
     }
+
+    // Email + contact validation
+    const emailError   = validateEmail(email);
+    const contactError = validateContactNumber(contactNumber);
+
+    if (emailError || contactError) {
+      setFieldErrors({
+        email: emailError || undefined,
+        contactNumber: contactError || undefined,
+      });
+      showModal(
+        "error",
+        "Please check your details",
+        emailError || contactError || "Some fields are invalid."
+      );
+      return;
+    }
+    setFieldErrors({});
 
     // Password match check
     if (password !== confirmPassword) {
@@ -121,12 +215,12 @@ export default function Register() {
 
     try {
       const res = await axios.post(`${API_URL}/api/auth/signup`, {
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
         firstName: firstName.trim(),
         middleName: middleName.trim(),
         lastName: lastName.trim(),
-        contactNumber: contactNumber.trim(),
+        contactNumber: contactNumber.trim() || null,
         fareCategory,
       });
 
@@ -187,24 +281,48 @@ export default function Register() {
             <Text style={styles.cardTitle}>Sign-up</Text>
 
             {/* ===== EMAIL ===== */}
-            <View style={styles.inputWrapper}>
+            <View
+              style={[
+                styles.inputWrapper,
+                fieldErrors.email && styles.inputWrapperError,
+              ]}
+            >
               <Ionicons
                 name="mail-outline"
                 size={18}
-                color="#7f9f97"
+                color={fieldErrors.email ? "#e74c3c" : "#7f9f97"}
                 style={styles.inputIcon}
               />
               <TextInput
                 placeholder="Email"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  if (fieldErrors.email) {
+                    setFieldErrors((e) => ({ ...e, email: undefined }));
+                  }
+                }}
+                onBlur={() =>
+                  setFieldErrors((e) => ({
+                    ...e,
+                    email: validateEmail(email) || undefined,
+                  }))
+                }
                 value={email}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoCorrect={false}
               />
             </View>
+            {fieldErrors.email ? (
+              <View style={styles.fieldHintRow}>
+                <Ionicons name="alert-circle-outline" size={12} color="#e74c3c" />
+                <Text style={styles.fieldHintError}>{fieldErrors.email}</Text>
+              </View>
+            ) : (
+              <Text style={styles.fieldHint}>Must be a valid @gmail.com address</Text>
+            )}
 
             {/* ===== PASSWORD ===== */}
             <View style={styles.inputWrapper}>
@@ -339,26 +457,54 @@ export default function Register() {
               />
             </View>
 
-            {/* ===== CONTACT NUMBER ===== */}
-            <View style={styles.inputWrapper}>
+            {/* ===== CONTACT NUMBER (optional, digits only, max 11) ===== */}
+            <View
+              style={[
+                styles.inputWrapper,
+                fieldErrors.contactNumber && styles.inputWrapperError,
+              ]}
+            >
               <Ionicons
                 name="call-outline"
                 size={18}
-                color="#7f9f97"
+                color={fieldErrors.contactNumber ? "#e74c3c" : "#7f9f97"}
                 style={styles.inputIcon}
               />
               <TextInput
-                placeholder="Contact Number"
+                placeholder="Contact Number (optional)"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
-                onChangeText={setContactNumber}
+                onChangeText={(v) => {
+                  setContactNumber(sanitizeContactNumber(v));
+                  if (fieldErrors.contactNumber) {
+                    setFieldErrors((e) => ({ ...e, contactNumber: undefined }));
+                  }
+                }}
+                onBlur={() =>
+                  setFieldErrors((e) => ({
+                    ...e,
+                    contactNumber:
+                      validateContactNumber(contactNumber) || undefined,
+                  }))
+                }
                 value={contactNumber}
                 keyboardType="phone-pad"
+                maxLength={CONTACT_DIGITS}
               />
             </View>
+            {fieldErrors.contactNumber ? (
+              <View style={styles.fieldHintRow}>
+                <Ionicons name="alert-circle-outline" size={12} color="#e74c3c" />
+                <Text style={styles.fieldHintError}>
+                  {fieldErrors.contactNumber}
+                </Text>
+              </View>
+            ) : null}
 
             {/* ===== FARE CATEGORY ===== */}
-            <Text style={styles.fieldLabel}>FARE CATEGORY</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 6 }]}>
+              FARE CATEGORY
+            </Text>
 
             <View style={styles.pillRow}>
               {FARE_OPTIONS.map((opt) => {
@@ -565,6 +711,31 @@ const styles = StyleSheet.create({
     fontFamily: "monster_act",
     fontSize: 14,
     color: "#1f3d38",
+  },
+
+  fieldHint: {
+    fontSize: 10.5,
+    fontFamily: "monster_act",
+    color: "#7f9f97",
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 4,
+    fontStyle: "italic",
+  },
+
+  fieldHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  fieldHintError: {
+    flex: 1,
+    fontSize: 10.5,
+    fontFamily: "monster_act",
+    color: "#e74c3c",
   },
 
   matchHintError: {

@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Live search + sort state (persists across polls)
   let searchTerm = "";
-  let sortMode   = "name-asc";
+  let sortMode   = "vehicle type";
 
   // Cached dataset between polls
   let cachedDrivers = [];
