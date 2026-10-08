@@ -689,7 +689,7 @@ export default function DriverProfile() {
               <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
 
-            <Text style={styles.footer}>FareGo • Driver Partner</Text>
+            <Text style={styles.footer}>Transpo-Go • Driver Partner</Text>
 
             <View style={{ height: navTotalSpace }} />
           </ScrollView>

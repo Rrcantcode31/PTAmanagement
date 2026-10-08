@@ -545,7 +545,7 @@ export default function Profile() {
               <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
 
-            <Text style={styles.footer}>FareGo • v1.0.0</Text>
+            <Text style={styles.footer}>Transpo-Go • v1.0.0</Text>
 
             <View style={{ height: navTotalSpace }} />
           </ScrollView>

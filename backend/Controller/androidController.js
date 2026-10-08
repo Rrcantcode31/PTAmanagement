@@ -6,7 +6,6 @@ import jwt from "jsonwebtoken";
 // Login for driver and commuter
 export const login = async (req, res) => {
   try {
-    // 'identifier' can be either an email address or a contact number
     const { identifier, password } = req.body;
 
     if (!identifier || !password) {
@@ -24,12 +23,13 @@ export const login = async (req, res) => {
           r.role_name,
           ui.first_name,
           ui.last_name,
+          ui.contact_number,
           'user' AS type
        FROM userauth u
        JOIN roles r ON u.role_id = r.role_id
        LEFT JOIN user_info ui ON u.user_id = ui.user_id
        WHERE u.email = ? OR ui.contact_number = ?`,
-      [identifier, identifier] // Passed twice to check both email and contact_number
+      [identifier, identifier]
     );
 
     let account = null;
@@ -45,6 +45,7 @@ export const login = async (req, res) => {
               r.role_name,
               di.first_name,
               di.last_name,
+              di.contact_number,
               di.terminal_id,
               tl.terminal_name,
               tl.latitude,
@@ -55,7 +56,7 @@ export const login = async (req, res) => {
           LEFT JOIN driver_info di         ON d.driver_id    = di.driver_id
           LEFT JOIN terminal_locations tl  ON di.terminal_id = tl.terminal_id
           WHERE d.email = ? OR di.contact_number = ?`,
-          [identifier, identifier] // Passed twice to check both email and contact_number
+          [identifier, identifier]
         );
 
       if (drivers.length > 0) {
@@ -63,7 +64,6 @@ export const login = async (req, res) => {
       }
     }
 
-    // ❌ If no account found
     if (!account) {
       return res.status(401).json({
         success: false,
@@ -71,7 +71,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // ================= PASSWORD CHECK =================
     const isValidPassword = await bcrypt.compare(
       password,
       account.password
@@ -84,7 +83,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // ================= TOKEN =================
     const token = jwt.sign(
       {
         id: account.id,
@@ -95,22 +93,22 @@ export const login = async (req, res) => {
       { expiresIn: process.env.TOKEN_EXPIRATION || "90d" }
     );
 
-    // ================= RESPONSE =================
     res.json({
       success: true,
       message: "Login successful",
       token,
       user: {
           id: account.id,
-          email: account.email,
-          firstName: account.first_name,
-          lastName: account.last_name,
-          role: account.role_name,
+          email: account.email || "", 
+          firstName: account.first_name || "",
+          lastName: account.last_name || "",
+          // 👇 ADDED: Return the contact number
+          contactNumber: account.contact_number || "", 
+          role: account.role_name || "",
           type: account.type,
 
-          // Driver-only fields (null for commuters)
           terminal_id:      account.terminal_id      ?? null,
-          terminal_name:    account.terminal_name    ?? null,
+          terminal_name:    account.terminal_name    || "",
           terminal_lat:     account.latitude  != null ? Number(account.latitude)  : null,
           terminal_lng:     account.longitude != null ? Number(account.longitude) : null,
         },
@@ -135,10 +133,9 @@ export const signup = async (req, res) => {
       lastName,
       middleName,
       contactNumber,
-      fareCategory,   // 'regular' | 'student' | 'pwd' | 'senior'
+      fareCategory,
     } = req.body;
 
-    // ---------- 1. Required fields ----------
     if (!password || !firstName || !lastName || !fareCategory) {
       return res.status(400).json({
         success: false,
@@ -146,7 +143,6 @@ export const signup = async (req, res) => {
       });
     }
 
-    // Ensure at least one of email or contact number is provided
     if (!email && !contactNumber) {
       return res.status(400).json({
         success: false,
@@ -161,9 +157,6 @@ export const signup = async (req, res) => {
       });
     }
 
-    // ---------- 2. Server-side allowlist ----------
-    // Matching your roles table:
-    //   3 = Regular, 4 = Student, 5 = PWD, 6 = Senior citizen
     const COMMUTER_ROLE_MAP = {
       regular: 3,
       student: 4,
@@ -180,8 +173,6 @@ export const signup = async (req, res) => {
       });
     }
 
-    // ---------- 3. Duplicate check ----------
-    // Check email if provided
     if (email) {
       const [existingUsers] = await db.promise().query(
         "SELECT user_id FROM userauth WHERE email = ?",
@@ -195,7 +186,6 @@ export const signup = async (req, res) => {
       }
     }
 
-    // Check contact number if provided
     if (contactNumber) {
       const [existingContacts] = await db.promise().query(
         "SELECT user_id FROM user_info WHERE contact_number = ?",
@@ -209,10 +199,8 @@ export const signup = async (req, res) => {
       }
     }
 
-    // ---------- 4. Hash password ----------
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ---------- 5. Insert into userauth + user_info ----------
     const connection = await db.promise().getConnection();
     await connection.beginTransaction();
 
@@ -234,14 +222,12 @@ export const signup = async (req, res) => {
 
       await connection.commit();
 
-      // ---------- 6. Get role_name ----------
       const [roleRows] = await db.promise().query(
         "SELECT role_name FROM roles WHERE role_id = ?",
         [role_id]
       );
       const role_name = roleRows[0]?.role_name || "Regular";
 
-      // ---------- 7. JWT — same shape as login ----------
       const token = jwt.sign(
         {
           id: userId,
@@ -252,17 +238,18 @@ export const signup = async (req, res) => {
         { expiresIn: process.env.TOKEN_EXPIRATION || "90d" }
       );
 
-      // ---------- 8. Respond — same shape as login ----------
       return res.status(201).json({
         success: true,
         message: "User registered successfully",
         token,
         user: {
           id: userId,
-          email: email || null,
-          firstName,
-          lastName,
-          role: role_name,
+          email: email || "",
+          firstName: firstName || "",
+          lastName: lastName || "",
+          // 👇 ADDED: Return the contact number
+          contactNumber: contactNumber || "",
+          role: role_name || "",
           type: "user",
         },
       });

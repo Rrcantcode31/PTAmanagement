@@ -1,7 +1,9 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const AUTH_VERSION = '3';
+// Bump this whenever the shape of `User` changes.
+// Old cached users with a different version get cleared on next app open.
+const AUTH_VERSION = '4'; // 👈 Bumped from 3 to 4
 
 type User = {
   id: number;
@@ -10,6 +12,8 @@ type User = {
   lastName: string;
   role: string;
   type: 'user' | 'driver';
+  
+  contactNumber: string | null; 
 
   terminal_id:   number | null;
   terminal_name: string | null;
@@ -21,7 +25,6 @@ type AuthContextType = {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  // 👇 new third arg: remember (optional, defaults to true)
   login: (userData: User, token: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -41,7 +44,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const storedVersion = await AsyncStorage.getItem('auth_version');
 
-      // If the stored user shape is from an older build, wipe it.
       if (storedVersion !== AUTH_VERSION) {
         await AsyncStorage.multiRemove(['user', 'token', 'auth_version']);
         return;
@@ -59,24 +61,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // 👇 accepts `remember`. Default true so existing callers keep working.
   const login = async (
     userData: User,
     userToken: string,
     remember: boolean = true
   ) => {
-    // Always hold the session in memory for the current app run
     setUser(userData);
     setToken(userToken);
 
     if (remember) {
-      // Persist to storage — session survives app restarts
       await AsyncStorage.setItem('user', JSON.stringify(userData));
       await AsyncStorage.setItem('token', userToken);
       await AsyncStorage.setItem('auth_version', AUTH_VERSION);
     } else {
-      // Do NOT persist. Also wipe any old session so a stale
-      // "remember me" from a previous login doesn't sneak back in.
       await AsyncStorage.multiRemove(['user', 'token']);
     }
   };

@@ -27,9 +27,65 @@ type ModalState = {
   onConfirm?: () => void;
 };
 
+// ============================================================
+// Validation Helpers
+// ============================================================
+const CONTACT_DIGITS = 11;
+
+/** 
+ * Smart sanitization:
+ * - If the user types an '@', assume it's an email and allow all characters.
+ * - If the user only types digits so far, cap it at 11 digits.
+ * - If the user types letters (but no '@' yet), allow them so they can finish typing an email.
+ */
+function sanitizeIdentifier(raw: string): string {
+  const value = raw || "";
+  
+  // 1. If it contains an @, it's an email. Allow everything.
+  if (value.includes("@")) return value;
+  
+  // 2. If it contains only digits, it's a phone number. Cap at 11 digits.
+  if (/^\d*$/.test(value)) {
+    return value.slice(0, CONTACT_DIGITS);
+  }
+  
+  // 3. Otherwise, it's letters (user is typing an email). Allow it.
+  return value;
+}
+
+/** 
+ * Validates the identifier.
+ * - If empty, returns an error.
+ * - If it contains '@', it's treated as an email (basic check).
+ * - If it doesn't contain '@', it's treated as a contact number and must be exactly 11 digits.
+ */
+function validateIdentifier(raw: string): string | null {
+  const value = (raw || "").trim();
+
+  if (!value) {
+    return "Email or contact number is required.";
+  }
+
+  if (value.includes("@")) {
+    // Basic email validation
+    if (/\s/.test(value)) return "Email cannot contain spaces.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      return "Please enter a valid email address.";
+    }
+    return null;
+  } else {
+    // Contact number validation
+    const digits = value.replace(/\D/g, "");
+    if (digits.length !== CONTACT_DIGITS) {
+      return `Contact number must be exactly ${CONTACT_DIGITS} digits.`;
+    }
+    return null;
+  }
+}
+
 export default function Login() {
-  // Renamed 'email' to 'identifier' to reflect that it can be an email OR a contact number
   const [identifier, setIdentifier] = useState("");
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const { login, user, isLoading } = useAuth();
@@ -64,10 +120,8 @@ export default function Login() {
     digitalFont: require("../assets/Font/digitalFont.ttf"),
   });
 
-  // ---- Wait for fonts + stored session before deciding what to show ----
   if (!fontsLoaded || isLoading) return null;
 
-  // ---- Already logged in? Skip the form ----
   if (user) {
     return (
       <Redirect
@@ -77,19 +131,26 @@ export default function Login() {
   }
 
   const handleLogin = async () => {
-    // Check if identifier is provided
-    if (!identifier.trim() || !password.trim()) {
-      showModal(
-        "error",
-        "Missing details",
-        "Please enter both your email/contact number and password."
-      );
+    // Validate identifier
+    const idError = validateIdentifier(identifier);
+    setIdentifierError(idError);
+
+    if (idError || !password.trim()) {
+      if (!password.trim()) {
+        showModal(
+          "error",
+          "Missing details",
+          "Please enter your password."
+        );
+      } else if (idError) {
+        showModal("error", "Invalid input", idError);
+      }
       return;
     }
 
     try {
       const res = await axios.post(`${API_URL}/api/auth/login`, {
-        identifier: identifier.trim(), // Send 'identifier' instead of 'email'
+        identifier: identifier.trim(),
         password,
       });
 
@@ -159,26 +220,43 @@ export default function Login() {
             <Text style={styles.cardTitle}>Login</Text>
 
             {/* ===== IDENTIFIER INPUT (Email or Contact Number) ===== */}
-            <View style={styles.inputWrapper}>
+            <View
+              style={[
+                styles.inputWrapper,
+                identifierError && styles.inputWrapperError,
+              ]}
+            >
               <Ionicons
                 name="person-outline"
                 size={18}
-                color="#7f9f97"
+                color={identifierError ? "#e74c3c" : "#7f9f97"}
                 style={styles.inputIcon}
               />
               <TextInput
                 placeholder="Email or Contact Number"
                 placeholderTextColor="#7f9f97"
                 style={styles.input}
-                onChangeText={setIdentifier}
+                onChangeText={(v) => {
+                  setIdentifier(sanitizeIdentifier(v));
+                  if (identifierError) setIdentifierError(null);
+                }}
+                onBlur={() => {
+                  setIdentifierError(validateIdentifier(identifier));
+                }}
                 value={identifier}
                 autoCapitalize="none"
-                keyboardType="default" // Changed to default to allow both @ and numbers
+                keyboardType="default"
                 autoCorrect={false}
               />
             </View>
             
-
+            {/* Inline Error Message */}
+            {identifierError && (
+              <View style={styles.fieldHintRow}>
+                <Ionicons name="alert-circle-outline" size={12} color="#e74c3c" />
+                <Text style={styles.fieldHintError}>{identifierError}</Text>
+              </View>
+            )}
 
             {/* ===== PASSWORD INPUT ===== */}
             <View style={styles.inputWrapper}>
@@ -226,7 +304,6 @@ export default function Login() {
                   )
                 }
               >
-                
               </TouchableOpacity>
             </View>
 
@@ -278,10 +355,10 @@ export default function Login() {
               </View>
 
               <Text style={[styles.modalTitle, { color: theme.titleColor }]}>
-                {modal.title}
+                {modal.title || ""}
               </Text>
 
-              <Text style={styles.modalMessage}>{modal.message}</Text>
+              <Text style={styles.modalMessage}>{modal.message || ""}</Text>
 
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.buttonBg }]}
@@ -336,14 +413,12 @@ function getModalTheme(type: ModalState["type"]) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-
   container: {
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 24,
     paddingBottom: 80,
   },
-
   loginCard: {
     borderRadius: 28,
     paddingHorizontal: 24,
@@ -354,7 +429,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.45)",
     backgroundColor: "rgba(255, 255, 255, 0.15)",
   },
-
   cardTitle: {
     fontSize: 28,
     fontFamily: "monsterrat_kp",
@@ -363,7 +437,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     letterSpacing: 1,
   },
-
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -372,11 +445,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.4)",
     paddingHorizontal: 16,
-    marginBottom: 8, // reduced slightly to accommodate helper text
+    marginBottom: 8,
   },
-
+  inputWrapperError: {
+    borderColor: "rgba(231, 76, 60, 0.55)",
+    backgroundColor: "rgba(231, 76, 60, 0.06)",
+  },
   inputIcon: { marginRight: 12 },
-
   input: {
     flex: 1,
     paddingVertical: 14,
@@ -384,8 +459,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1f3d38",
   },
-
-  // ---------- remember me + forgot password ----------
+  fieldHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: -4,
+    marginBottom: 16,
+    marginLeft: 4,
+  },
+  fieldHintError: {
+    flex: 1,
+    fontSize: 10.5,
+    fontFamily: "monster_act",
+    color: "#e74c3c",
+  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -393,13 +480,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 12,
   },
-
   rememberRow: {
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 1,
   },
-
   checkbox: {
     width: 18,
     height: 18,
@@ -411,20 +496,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: "rgba(255,255,255,0.3)",
   },
-
   checkboxChecked: {
     backgroundColor: "#319086",
     borderColor: "#319086",
   },
-
   rememberText: {
     fontSize: 13,
     fontFamily: "monster_act",
     color: "#4a5f5a",
   },
-
   forgotWrap: {},
-
   loginBtn: {
     backgroundColor: "rgba(255, 255, 255, 0.65)",
     paddingVertical: 15,
@@ -434,14 +515,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.8)",
     marginBottom: 20,
   },
-
   loginBtnText: {
     color: "#1f6f66",
     fontSize: 16,
     fontFamily: "monsterrat_kp",
     letterSpacing: 3,
   },
-
   signupLink: {
     textAlign: "center",
     color: "#4a5f5a",
@@ -449,13 +528,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     fontFamily: "monster_act",
   },
-
   signupLinkBold: {
     color: "#2b5f80",
     fontFamily: "monsterrat_font",
     fontWeight: "700",
   },
-
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 30, 28, 0.4)",
@@ -463,7 +540,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 28,
   },
-
   modalCard: {
     width: "100%",
     maxWidth: 340,
@@ -476,7 +552,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.8)",
   },
-
   modalIconWrap: {
     width: 64,
     height: 64,
@@ -486,7 +561,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     marginBottom: 16,
   },
-
   modalTitle: {
     fontSize: 20,
     fontFamily: "monsterrat_kp",
@@ -494,7 +568,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.2,
   },
-
   modalMessage: {
     fontSize: 14,
     lineHeight: 20,
@@ -503,14 +576,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 24,
   },
-
   modalButton: {
     width: "100%",
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: "center",
   },
-
   modalButtonText: {
     color: "#fff",
     fontSize: 15,
