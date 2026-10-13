@@ -1,21 +1,20 @@
-// sample3D.js
-// Requires Leaflet + Leaflet-Geoman + Socket.IO client to already be loaded
-
 document.addEventListener('DOMContentLoaded', function () {
 
-  // ==================================================
-  // CONFIGURATION
-  // ==================================================
 
-  const CENTER = [6.484106059165397, 124.85201408832982];
+
+// Fallback only — real value is loaded from the backend
+let CENTER = [6.499362374631149, 124.85210363662989];
 
   const GET_DISPATCH_ZONE_API    = '/getDispatchAreZone';
   const POST_DISPATCH_ZONE_API   = '/postDispatchAreaZone';
   const PUT_DISPATCH_ZONE_API    = '/putDispatchAreaZone';
   const DELETE_DISPATCH_ZONE_API = '/deleteDispatchAreaZone';
   const GET_TERMINALS_API        = '/terminals';
+  const MAP_CENTER_API = '/mapCenter';
 
   const SOCKET_URL = 'https://mobile-backend-application.up.railway.app';
+
+
 
   // Koronadal City is the hub — never offered as a zone assignment target
   const HUB_TERMINAL_ID = 1;
@@ -34,6 +33,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Default zoom level
   const DEFAULT_ZOOM = 18;
+
+  
 
   // ==================================================
   // STATE
@@ -112,10 +113,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // ==================================================
-  // MODAL 1 — CREATE ZONE FORM
-  // ==================================================
-
   async function loadTerminals() {
     if (terminalsCache) return terminalsCache;
 
@@ -134,6 +131,57 @@ document.addEventListener('DOMContentLoaded', function () {
       return terminalsCache;
     }
   }
+
+  function applyCenter(lat, lng, fly) {
+  CENTER = [lat, lng];
+  PAN_BOUNDS = boundsAround(lat, lng, MAX_PAN_RADIUS_KM);
+  visibilityCircle.setLatLng(CENTER);
+
+  // Lift the old bounds so flyTo isn't fighting them, then re-apply
+  map.setMaxBounds(null);
+  if (fly) {
+    map.flyTo(CENTER, map.getZoom(), { animate: true, duration: 0.8 });
+    map.once('moveend', function () { map.setMaxBounds(PAN_BOUNDS); });
+  } else {
+    map.setView(CENTER, map.getZoom(), { animate: false });
+    map.setMaxBounds(PAN_BOUNDS);
+  }
+
+  // keep the input fields in sync
+  const latInput = document.getElementById('centerLat');
+  const lngInput = document.getElementById('centerLng');
+  if (latInput) latInput.value = lat;
+  if (lngInput) lngInput.value = lng;
+}
+
+async function loadMapCenter() {
+  try {
+    const res = await fetch(MAP_CENTER_API, {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
+    const result = await res.json();
+    if (res.ok && result.success) {
+      applyCenter(result.data.lat, result.data.lng, false);
+    }
+  } catch (err) {
+    console.error('[center] failed to load, using fallback:', err);
+  }
+}
+
+async function saveMapCenter(lat, lng) {
+  const res = await fetch(MAP_CENTER_API, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ lat, lng })
+  });
+  const result = await res.json();
+  if (!res.ok || !result.success) {
+    throw new Error(result.message || 'Failed to save map center');
+  }
+  applyCenter(result.data.lat, result.data.lng, true);
+}
 
   function openCreateZoneModal(geometry) {
     return new Promise(async (resolve) => {
@@ -408,7 +456,8 @@ document.addEventListener('DOMContentLoaded', function () {
     );
   }
 
-  const PAN_BOUNDS = boundsAround(CENTER[0], CENTER[1], MAX_PAN_RADIUS_KM);
+  // was: const PAN_BOUNDS = ...
+  let PAN_BOUNDS = boundsAround(CENTER[0], CENTER[1], MAX_PAN_RADIUS_KM); 
 
   const map = L.map('map', {
     zoomControl: false,
@@ -538,8 +587,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // VISIBILITY RADIUS (visual aid)
   // ==================================================
 
-  L.circle(CENTER, {
-    radius: DRIVER_VISIBILITY_RADIUS_KM * 1000, // convert km to meters
+   const visibilityCircle = L.circle(CENTER, {
+    radius: DRIVER_VISIBILITY_RADIUS_KM * 1000,
     color: '#2c7a6e',
     weight: 1,
     dashArray: '6 4',
@@ -601,6 +650,24 @@ document.addEventListener('DOMContentLoaded', function () {
           <button type="button" class="zone-tools-item" data-action="toggle-edit">
             <i class="fas fa-pen"></i> <span id="zoneToolsEditLabel">Toggle Reshape Mode</span>
           </button>
+
+           <div class="zone-tools-section">Map Center</div>
+
+          <div class="zone-tools-center-form">
+            <input type="number" step="any" id="centerLat" placeholder="Latitude" class="zone-modal-input" />
+
+            <input type="number" step="any" id="centerLng" placeholder="Longitude" class="zone-modal-input" />
+
+            <button type="button" class="zone-tools-item" id="centerUseView">
+
+              <i class="fas fa-location-arrow"></i> Use Current Map View
+            </button>
+
+            <button type="button" class="zone-tools-item" id="centerSave">
+              <i class="fas fa-save"></i> Save Center
+            </button>
+
+          </div>
 
           <div class="zone-tools-section">Actions</div>
 
@@ -686,6 +753,46 @@ document.addEventListener('DOMContentLoaded', function () {
         break;
     }
   });
+
+
+  document.getElementById('centerUseView').addEventListener('click', function () {
+  const c = map.getCenter();
+  document.getElementById('centerLat').value = c.lat.toFixed(6);
+  document.getElementById('centerLng').value = c.lng.toFixed(6);
+});
+
+document.getElementById('centerSave').addEventListener('click', async function () {
+  const lat = parseFloat(document.getElementById('centerLat').value);
+  const lng = parseFloat(document.getElementById('centerLng').value);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+      lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    await openAlertModal({
+      title: 'Invalid Coordinates',
+      icon: 'fa-exclamation-triangle',
+      variant: 'danger',
+      message: 'Enter a valid latitude (-90 to 90) and longitude (-180 to 180).'
+    });
+    return;
+  }
+
+  try {
+    await saveMapCenter(lat, lng);
+    await openAlertModal({
+      title: 'Center Updated',
+      icon: 'fa-check-circle',
+      variant: 'success',
+      message: 'The map center was updated.'
+    });
+  } catch (err) {
+    await openAlertModal({
+      title: 'Save Failed',
+      icon: 'fa-exclamation-triangle',
+      variant: 'danger',
+      message: err.message
+    });
+  }
+});
 
   cancelBtn.addEventListener('click', function (e) {
     e.stopPropagation();
@@ -1286,6 +1393,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // START
   // ==================================================
 
+  loadMapCenter();
   loadDispatchZones();
   initDriverTracking();
 

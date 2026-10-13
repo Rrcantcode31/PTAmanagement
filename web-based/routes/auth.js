@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const uploadProfile = require('../middleware/uploadProfile')
+const uploadProfile = require('../middleware/uploadProfile');
 const authController = require('../controller/backendController');
+const mapCenterController = require('../controller/mapCenterController');
 
-
-
-//authencticaion
+//authenctication
 router.post('/Login', authController.Login);
+
 //end session
 router.get('/Logout', authController.logout);
+
 // admin profile mnger
 router.post('/update-profile-picture', authController.isLoggedIn, uploadProfile.single('avatar'), authController.uploadProfilePicture);
 
@@ -24,6 +25,7 @@ router.post('/postDispatchAreaZone', authController.isLoggedIn, authController.p
 router.put('/putDispatchAreaZone/:zone_id', authController.isLoggedIn, authController.putDispatchZoneArea);
 router.put('/updateFarePrices', authController.isLoggedIn, authController.updateFarePrice);
 router.put('/UpdateDriverCred', authController.isLoggedIn, authController.UpdateDriverCred);
+router.put('/mapCenter',authController.isLoggedIn, mapCenterController.updateMapCenter);
 
 //Admin get data
 router.get('/terminals', authController.isLoggedIn, authController.GetAllTerminalLocations);
@@ -32,7 +34,8 @@ router.get('/getVehicles', authController.isLoggedIn, authController.getVehicles
 router.get('/getFarePrice', authController.isLoggedIn, authController.getFarePrices);
 router.get('/getDispatchAreZone', authController.isLoggedIn, authController.getDispatchZoneArea);
 router.get('/dashboard-stats', authController.isLoggedIn, authController.getDashboardStats);
-router.get('/getDepartureLogs', authController.isLoggedIn, authController.getDepartureLogs);    
+router.get('/getDepartureLogs', authController.isLoggedIn, authController.getDepartureLogs);
+router.get('/mapCenter', authController.isLoggedIn, mapCenterController.getMapCenter);
 
 //Admin delete function
 router.delete('/DeleteDriverInfo', authController.isLoggedIn, authController.DeleteDriverInfo);
