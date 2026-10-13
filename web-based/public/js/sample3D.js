@@ -1,20 +1,23 @@
+// sample3D.js
+// Requires Leaflet + Leaflet-Geoman + Socket.IO client to already be loaded
+
 document.addEventListener('DOMContentLoaded', function () {
 
+  // ==================================================
+  // CONFIGURATION
+  // ==================================================
 
-
-// Fallback only — real value is loaded from the backend
-let CENTER = [6.499362374631149, 124.85210363662989];
+  // Fallback only — the real value is loaded from the backend (/mapCenter)
+  let CENTER = [6.499362374631149, 124.85210363662989];
 
   const GET_DISPATCH_ZONE_API    = '/getDispatchAreZone';
   const POST_DISPATCH_ZONE_API   = '/postDispatchAreaZone';
   const PUT_DISPATCH_ZONE_API    = '/putDispatchAreaZone';
   const DELETE_DISPATCH_ZONE_API = '/deleteDispatchAreaZone';
   const GET_TERMINALS_API        = '/terminals';
-  const MAP_CENTER_API = '/mapCenter';
+  const MAP_CENTER_API           = '/mapCenter';
 
   const SOCKET_URL = 'https://mobile-backend-application.up.railway.app';
-
-
 
   // Koronadal City is the hub — never offered as a zone assignment target
   const HUB_TERMINAL_ID = 1;
@@ -34,8 +37,6 @@ let CENTER = [6.499362374631149, 124.85210363662989];
   // Default zoom level
   const DEFAULT_ZOOM = 18;
 
-  
-
   // ==================================================
   // STATE
   // ==================================================
@@ -48,6 +49,44 @@ let CENTER = [6.499362374631149, 124.85210363662989];
 
   // Snap-back timer handle
   let snapBackTimer = null;
+
+  // ==================================================
+  // HELPERS
+  // ==================================================
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Zone colors. Green/red are left out on purpose: drivers use them.
+  const ZONE_COLORS = [
+    '#D85A30',  // orange
+    '#2f80ed',  // blue
+    '#8e44ad',  // purple
+    '#e0a800',  // amber
+    '#d63384',  // pink
+    '#0e8c8c',  // teal
+    '#8d6e63',  // brown
+    '#3f51b5'   // indigo
+  ];
+
+  // One stable color per terminal, so the same terminal is always the same color.
+  // To give every zone its own color instead, use zone.zone_id here.
+  function colorForZone(zone) {
+    const key = Number(zone.terminal_id);
+    const idx = Number.isFinite(key) ? Math.abs(key) % ZONE_COLORS.length : 0;
+    return ZONE_COLORS[idx];
+  }
+
+  function terminalName(zone) {
+    if (zone.terminal_name) return zone.terminal_name;
+    const found = (terminalsCache || []).find(function (t) {
+      return Number(t.terminal_id) === Number(zone.terminal_id);
+    });
+    return found ? found.terminal_name : 'Terminal #' + zone.terminal_id;
+  }
 
   // ==================================================
   // MODAL SYSTEM — INJECTED AT STARTUP
@@ -113,6 +152,10 @@ let CENTER = [6.499362374631149, 124.85210363662989];
     }
   });
 
+  // ==================================================
+  // MODAL 1 — CREATE ZONE FORM
+  // ==================================================
+
   async function loadTerminals() {
     if (terminalsCache) return terminalsCache;
 
@@ -132,57 +175,6 @@ let CENTER = [6.499362374631149, 124.85210363662989];
     }
   }
 
-  function applyCenter(lat, lng, fly) {
-  CENTER = [lat, lng];
-  PAN_BOUNDS = boundsAround(lat, lng, MAX_PAN_RADIUS_KM);
-  visibilityCircle.setLatLng(CENTER);
-
-  // Lift the old bounds so flyTo isn't fighting them, then re-apply
-  map.setMaxBounds(null);
-  if (fly) {
-    map.flyTo(CENTER, map.getZoom(), { animate: true, duration: 0.8 });
-    map.once('moveend', function () { map.setMaxBounds(PAN_BOUNDS); });
-  } else {
-    map.setView(CENTER, map.getZoom(), { animate: false });
-    map.setMaxBounds(PAN_BOUNDS);
-  }
-
-  // keep the input fields in sync
-  const latInput = document.getElementById('centerLat');
-  const lngInput = document.getElementById('centerLng');
-  if (latInput) latInput.value = lat;
-  if (lngInput) lngInput.value = lng;
-}
-
-async function loadMapCenter() {
-  try {
-    const res = await fetch(MAP_CENTER_API, {
-      credentials: 'include',
-      headers: { 'Accept': 'application/json' }
-    });
-    const result = await res.json();
-    if (res.ok && result.success) {
-      applyCenter(result.data.lat, result.data.lng, false);
-    }
-  } catch (err) {
-    console.error('[center] failed to load, using fallback:', err);
-  }
-}
-
-async function saveMapCenter(lat, lng) {
-  const res = await fetch(MAP_CENTER_API, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ lat, lng })
-  });
-  const result = await res.json();
-  if (!res.ok || !result.success) {
-    throw new Error(result.message || 'Failed to save map center');
-  }
-  applyCenter(result.data.lat, result.data.lng, true);
-}
-
   function openCreateZoneModal(geometry) {
     return new Promise(async (resolve) => {
 
@@ -194,10 +186,8 @@ async function saveMapCenter(lat, lng) {
         return Number(t.terminal_id) !== HUB_TERMINAL_ID;
       });
 
-      // Header
       modalTitle.textContent = 'Create Queue Zone';
 
-      // Body — name + terminal only (zone_type is implicit)
       modalBody.innerHTML = `
         <div class="zone-modal-field">
           <label for="zmName">Zone Name</label>
@@ -217,7 +207,7 @@ async function saveMapCenter(lat, lng) {
           <select id="zmTerminal" class="zone-modal-select">
             <option value="">— Select a terminal —</option>
             ${assignableTerminals.map(t => `
-              <option value="${t.terminal_id}">${t.terminal_name}</option>
+              <option value="${t.terminal_id}">${escapeHtml(t.terminal_name)}</option>
             `).join('')}
           </select>
           <span class="zone-modal-error" id="zmTerminalError"></span>
@@ -229,7 +219,6 @@ async function saveMapCenter(lat, lng) {
         </div>
       `;
 
-      // Footer
       modalFooter.innerHTML = `
         <button type="button" class="zone-modal-btn zone-modal-cancel" id="zmCancel">
           Cancel
@@ -239,7 +228,6 @@ async function saveMapCenter(lat, lng) {
         </button>
       `;
 
-      // Cancel handler
       function doCancel() {
         modalEl._cancelHandler = null;
         closeModal();
@@ -249,14 +237,12 @@ async function saveMapCenter(lat, lng) {
 
       document.getElementById('zmCancel').addEventListener('click', doCancel);
 
-      // Submit
       document.getElementById('zmSubmit').addEventListener('click', function () {
         const name = document.getElementById('zmName').value.trim();
         const term = document.getElementById('zmTerminal').value;
 
         let hasError = false;
 
-        // Validate name
         if (!name) {
           document.getElementById('zmNameError').textContent = 'Zone name is required';
           document.getElementById('zmName').classList.add('has-error');
@@ -266,7 +252,6 @@ async function saveMapCenter(lat, lng) {
           document.getElementById('zmName').classList.remove('has-error');
         }
 
-        // Validate terminal
         if (!term) {
           document.getElementById('zmTerminalError').textContent = 'Please select a terminal';
           document.getElementById('zmTerminal').classList.add('has-error');
@@ -456,13 +441,12 @@ async function saveMapCenter(lat, lng) {
     );
   }
 
-  // was: const PAN_BOUNDS = ...
-  let PAN_BOUNDS = boundsAround(CENTER[0], CENTER[1], MAX_PAN_RADIUS_KM); 
+  let PAN_BOUNDS = boundsAround(CENTER[0], CENTER[1], MAX_PAN_RADIUS_KM);
 
   const map = L.map('map', {
     zoomControl: false,
 
-    // Dragging is allowed, but the map will glide back to CENTER after
+    // Dragging is allowed, but the map glides back to CENTER after
     // the user stops interacting
     dragging: true,
     keyboard: true,
@@ -474,12 +458,12 @@ async function saveMapCenter(lat, lng) {
     // Safety net: even mid-drag, the map can't run away further than
     // MAX_PAN_RADIUS_KM from CENTER
     maxBounds: PAN_BOUNDS,
-    maxBoundsViscosity: 0.85,   // slight give — feels natural, snaps back on
+    maxBoundsViscosity: 0.85,
     minZoom: 17,
     maxZoom: 18.5
   }).setView(CENTER, DEFAULT_ZOOM);
 
-  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   // ==================================================
   // SNAP-BACK LOGIC
@@ -505,23 +489,16 @@ async function saveMapCenter(lat, lng) {
       const dLng = Math.abs(c.lng - CENTER[1]);
       if (dLat < 0.00005 && dLng < 0.00005) return;
 
-      // Preserve the current zoom level — user gets to choose how close they look
+      // Preserve the current zoom level
       map.flyTo(
         [CENTER[0], CENTER[1]],
         map.getZoom(),
-        {
-          animate: true,
-          duration: 0.8,
-          easeLinearity: 0.25
-        }
+        { animate: true, duration: 0.8, easeLinearity: 0.25 }
       );
     }, SNAP_BACK_DELAY_MS);
   }
 
-  // Cancel any pending snap-back while the user is actively dragging
   map.on('dragstart', cancelSnapBack);
-
-  // Snap back after the user releases the drag
   map.on('dragend', scheduleSnapBack);
 
   // ==================================================
@@ -529,7 +506,7 @@ async function saveMapCenter(lat, lng) {
   // ==================================================
 
   const RecenterControl = L.Control.extend({
-    options: { position: 'bottomleft' },
+    options: { position: 'bottomright' },
 
     onAdd: function () {
       const btn = L.DomUtil.create('button', 'leaflet-bar recenter-btn');
@@ -587,8 +564,8 @@ async function saveMapCenter(lat, lng) {
   // VISIBILITY RADIUS (visual aid)
   // ==================================================
 
-   const visibilityCircle = L.circle(CENTER, {
-    radius: DRIVER_VISIBILITY_RADIUS_KM * 1000,
+  const visibilityCircle = L.circle(CENTER, {
+    radius: DRIVER_VISIBILITY_RADIUS_KM * 1000, // km -> meters
     color: '#2c7a6e',
     weight: 1,
     dashArray: '6 4',
@@ -596,6 +573,61 @@ async function saveMapCenter(lat, lng) {
     fillOpacity: 0.05,
     interactive: false
   }).addTo(map);
+
+  // ==================================================
+  // MAP CENTER — APPLY / LOAD / SAVE
+  // ==================================================
+
+  function applyCenter(lat, lng, fly) {
+    CENTER = [lat, lng];
+    PAN_BOUNDS = boundsAround(lat, lng, MAX_PAN_RADIUS_KM);
+    visibilityCircle.setLatLng(CENTER);
+
+    // Lift the old bounds so flyTo isn't fighting them, then re-apply
+    map.setMaxBounds(null);
+    if (fly) {
+      map.flyTo(CENTER, map.getZoom(), { animate: true, duration: 0.8 });
+      map.once('moveend', function () { map.setMaxBounds(PAN_BOUNDS); });
+    } else {
+      map.setView(CENTER, map.getZoom(), { animate: false });
+      map.setMaxBounds(PAN_BOUNDS);
+    }
+
+    // Keep the input fields in sync with the saved center
+    const latInput = document.getElementById('centerLat');
+    const lngInput = document.getElementById('centerLng');
+    if (latInput) latInput.value = Number(lat).toFixed(6);
+    if (lngInput) lngInput.value = Number(lng).toFixed(6);
+  }
+
+  async function loadMapCenter() {
+    try {
+      const res = await fetch(MAP_CENTER_API, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' }
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        applyCenter(result.data.lat, result.data.lng, false);
+      }
+    } catch (err) {
+      console.error('[center] failed to load, using fallback:', err);
+    }
+  }
+
+  async function saveMapCenter(lat, lng) {
+    const res = await fetch(MAP_CENTER_API, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ lat, lng })
+    });
+    const result = await res.json();
+    if (!res.ok || !result.success) {
+      throw new Error(result.message || 'Failed to save map center');
+    }
+    applyCenter(result.data.lat, result.data.lng, true);
+  }
 
   // ==================================================
   // GEOMAN — disable default toolbar
@@ -651,17 +683,33 @@ async function saveMapCenter(lat, lng) {
             <i class="fas fa-pen"></i> <span id="zoneToolsEditLabel">Toggle Reshape Mode</span>
           </button>
 
-           <div class="zone-tools-section">Map Center</div>
+          <div class="zone-tools-section">Map Center</div>
 
           <div class="zone-tools-center-form">
-            <input type="number" step="any" id="centerLat" placeholder="Latitude" class="zone-modal-input" />
 
-            <input type="number" step="any" id="centerLng" placeholder="Longitude" class="zone-modal-input" />
+            <div class="zone-center-search">
+              <input type="text" id="centerSearch" class="zone-modal-input"
+                     placeholder="Search a place (e.g. Banga Terminal)" autocomplete="off" />
+              <button type="button" class="zone-center-search-btn" id="centerSearchBtn"
+                      title="Search" aria-label="Search">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+
+            <div id="centerResults" class="zone-center-results"></div>
+
+            <button type="button" class="zone-tools-item" id="centerUseMyLocation">
+              <i class="fas fa-crosshairs"></i> Use My Current Location
+            </button>
 
             <button type="button" class="zone-tools-item" id="centerUseView">
-
               <i class="fas fa-location-arrow"></i> Use Current Map View
             </button>
+
+            <input type="number" step="any" id="centerLat" placeholder="Latitude" class="zone-modal-input" />
+            <input type="number" step="any" id="centerLng" placeholder="Longitude" class="zone-modal-input" />
+
+            <div id="centerPicked" class="zone-center-msg"></div>
 
             <button type="button" class="zone-tools-item" id="centerSave">
               <i class="fas fa-save"></i> Save Center
@@ -754,49 +802,178 @@ async function saveMapCenter(lat, lng) {
     }
   });
 
-
-  document.getElementById('centerUseView').addEventListener('click', function () {
-  const c = map.getCenter();
-  document.getElementById('centerLat').value = c.lat.toFixed(6);
-  document.getElementById('centerLng').value = c.lng.toFixed(6);
-});
-
-document.getElementById('centerSave').addEventListener('click', async function () {
-  const lat = parseFloat(document.getElementById('centerLat').value);
-  const lng = parseFloat(document.getElementById('centerLng').value);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
-      lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    await openAlertModal({
-      title: 'Invalid Coordinates',
-      icon: 'fa-exclamation-triangle',
-      variant: 'danger',
-      message: 'Enter a valid latitude (-90 to 90) and longitude (-180 to 180).'
-    });
-    return;
-  }
-
-  try {
-    await saveMapCenter(lat, lng);
-    await openAlertModal({
-      title: 'Center Updated',
-      icon: 'fa-check-circle',
-      variant: 'success',
-      message: 'The map center was updated.'
-    });
-  } catch (err) {
-    await openAlertModal({
-      title: 'Save Failed',
-      icon: 'fa-exclamation-triangle',
-      variant: 'danger',
-      message: err.message
-    });
-  }
-});
-
   cancelBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     cancelActiveTool();
+  });
+
+  // ==================================================
+  // MAP CENTER: SEARCH / MY LOCATION / MAP VIEW -> SAVE
+  // ==================================================
+
+  const searchInput = document.getElementById('centerSearch');
+  const searchBtn   = document.getElementById('centerSearchBtn');
+  const resultsBox  = document.getElementById('centerResults');
+  const latInputEl  = document.getElementById('centerLat');
+  const lngInputEl  = document.getElementById('centerLng');
+  const pickedEl    = document.getElementById('centerPicked');
+
+  // Keep typing/arrow keys from triggering Leaflet's keyboard pan
+  [searchInput, latInputEl, lngInputEl].forEach(function (el) {
+    L.DomEvent.on(el, 'keydown keyup keypress', L.DomEvent.stopPropagation);
+  });
+
+  // Fill the coordinate fields. Nothing is saved until "Save Center" is clicked.
+  function fillCenterInputs(lat, lng, label) {
+    latInputEl.value = Number(lat).toFixed(6);
+    lngInputEl.value = Number(lng).toFixed(6);
+    pickedEl.textContent = label
+      ? 'Selected: ' + label + ' (click Save Center to apply)'
+      : '';
+  }
+
+  // ---------- 1. Search by place name ----------
+  async function runPlaceSearch() {
+    const query = searchInput.value.trim();
+    if (!query) return;
+
+    searchBtn.disabled = true;
+    resultsBox.innerHTML = '<div class="zone-center-msg">Searching…</div>';
+
+    try {
+      // Remove "&countrycodes=ph" to search worldwide
+      const url =
+        'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=ph&q=' +
+        encodeURIComponent(query);
+
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('Search failed (HTTP ' + res.status + ')');
+      const places = await res.json();
+
+      if (!places.length) {
+        resultsBox.innerHTML = '<div class="zone-center-msg">No places found. Try a different name.</div>';
+        return;
+      }
+
+      resultsBox.innerHTML = '';
+      places.forEach(function (p) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'zone-center-result';
+        item.textContent = p.display_name;
+        item.addEventListener('click', function () {
+          resultsBox.innerHTML = '';
+          searchInput.value = '';
+          fillCenterInputs(Number(p.lat), Number(p.lon), p.display_name);
+        });
+        resultsBox.appendChild(item);
+      });
+    } catch (err) {
+      console.error('[center] place search failed:', err);
+      resultsBox.innerHTML = '<div class="zone-center-msg">Search failed. Check your connection and try again.</div>';
+    } finally {
+      searchBtn.disabled = false;
+    }
+  }
+
+  searchBtn.addEventListener('click', runPlaceSearch);
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runPlaceSearch();
+    }
+  });
+
+  // ---------- 2. Use the admin's current location ----------
+  function getMyLocation() {
+    return new Promise(function (resolve, reject) {
+      if (!navigator.geolocation) {
+        return reject(new Error('This browser does not support location.'));
+      }
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          });
+        },
+        function (err) {
+          reject(new Error(
+            err.code === 1
+              ? 'Location permission was denied. Allow location access for this site and try again.'
+              : 'Could not get your location. Try again, or use search instead.'
+          ));
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
+
+  document.getElementById('centerUseMyLocation').addEventListener('click', async function () {
+    const btn = this;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating…';
+
+    try {
+      const loc = await getMyLocation();
+      const note = loc.accuracy > 100
+        ? ' (accuracy about ' + Math.round(loc.accuracy) + ' m)'
+        : '';
+      fillCenterInputs(loc.lat, loc.lng, 'Your current location' + note);
+    } catch (err) {
+      await openAlertModal({
+        title: 'Location Unavailable',
+        icon: 'fa-exclamation-triangle',
+        variant: 'danger',
+        message: escapeHtml(err.message)
+      });
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  // ---------- 3. Use the current map view ----------
+  document.getElementById('centerUseView').addEventListener('click', function () {
+    const c = map.getCenter();
+    fillCenterInputs(c.lat, c.lng, 'Current map view');
+  });
+
+  // ---------- Save Center ----------
+  document.getElementById('centerSave').addEventListener('click', async function () {
+    const lat = parseFloat(latInputEl.value);
+    const lng = parseFloat(lngInputEl.value);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+        lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      await openAlertModal({
+        title: 'No Center Selected',
+        icon: 'fa-exclamation-triangle',
+        variant: 'danger',
+        message: 'Search a place, use your location, or use the map view first. Then click Save Center.'
+      });
+      return;
+    }
+
+    try {
+      await saveMapCenter(lat, lng);
+      pickedEl.textContent = '';
+      await openAlertModal({
+        title: 'Center Saved',
+        icon: 'fa-check-circle',
+        variant: 'success',
+        message: 'The map center was saved.'
+      });
+    } catch (err) {
+      await openAlertModal({
+        title: 'Save Failed',
+        icon: 'fa-exclamation-triangle',
+        variant: 'danger',
+        message: escapeHtml(err.message)
+      });
+    }
   });
 
   // ==================================================
@@ -848,28 +1025,84 @@ document.getElementById('centerSave').addEventListener('click', async function (
   // ==================================================
 
   const legend = L.control({ position: 'topright' });
+  let legendDiv = null;
+
+  const LEGEND_COLLAPSED_KEY = 'dispatchLegendCollapsed';
 
   legend.onAdd = function () {
-    const div = L.DomUtil.create('div', 'zone-legend');
+    legendDiv = L.DomUtil.create('div', 'zone-legend');
+    L.DomEvent.disableClickPropagation(legendDiv);
+    L.DomEvent.disableScrollPropagation(legendDiv);
 
-    div.innerHTML = `
-      <div class="zone-legend-row">
-        <span class="zone-swatch" style="background:#D85A30"></span>
-        Dispatch Zone
-      </div>
-      <div class="zone-legend-row">
-        <span class="zone-swatch" style="background:#2ecc71; border-radius:50%;"></span>
-        Driver &mdash; Active
-      </div>
-      <div class="zone-legend-row">
-        <span class="zone-swatch" style="background:#e74c3c; border-radius:50%;"></span>
-        Driver &mdash; Inactive
-      </div>
-      <div class="zone-legend-note">Geofence boundary</div>
-    `;
+    // Restore the last choice (hidden or shown)
+    try {
+      if (localStorage.getItem(LEGEND_COLLAPSED_KEY) === '1') {
+        legendDiv.classList.add('is-collapsed');
+      }
+    } catch (_) { /* storage blocked: ignore */ }
 
-    return div;
+    // One delegated handler, so it survives renderLegend() rebuilding the HTML
+    legendDiv.addEventListener('click', function (e) {
+      if (!e.target.closest('.zone-legend-toggle')) return;
+      const collapsed = legendDiv.classList.toggle('is-collapsed');
+      const toggle = legendDiv.querySelector('.zone-legend-toggle');
+      if (toggle) toggle.setAttribute('aria-expanded', String(!collapsed));
+      try { localStorage.setItem(LEGEND_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (_) {}
+    });
+
+    renderLegend([]);
+    return legendDiv;
   };
+
+  // Rebuilt every time zones are loaded: one row per terminal that has a zone
+  function renderLegend(zoneList) {
+    if (!legendDiv) return;
+
+    const seen = {};
+    const rows = [];
+    zoneList.forEach(function (z) {
+      const key = String(z.terminal_id);
+      if (seen[key]) return;
+      seen[key] = true;
+      rows.push({ color: colorForZone(z), label: terminalName(z) });
+    });
+    rows.sort(function (a, b) { return a.label.localeCompare(b.label); });
+
+    const zoneRows = rows.length
+      ? rows.map(function (r) {
+          return `
+            <div class="zone-legend-row">
+              <span class="zone-swatch" style="background:${r.color}"></span>
+              ${escapeHtml(r.label)}
+            </div>`;
+        }).join('')
+      : '<div class="zone-legend-note">No zones yet</div>';
+
+    const isCollapsed = legendDiv.classList.contains('is-collapsed');
+
+    legendDiv.innerHTML = `
+      <button type="button" class="zone-legend-toggle"
+              aria-expanded="${!isCollapsed}" title="Show / hide legend">
+        <span><i class="fas fa-layer-group"></i> Legend</span>
+        <i class="fas fa-chevron-up zone-legend-chevron"></i>
+      </button>
+
+      <div class="zone-legend-body">
+        <div class="zone-legend-title">Dispatch Zones</div>
+        ${zoneRows}
+
+        <div class="zone-legend-title">Drivers</div>
+        <div class="zone-legend-row">
+          <span class="zone-swatch is-dot" style="background:#2ecc71"></span>
+          Active
+        </div>
+        <div class="zone-legend-row">
+          <span class="zone-swatch is-dot" style="background:#e74c3c"></span>
+          Inactive
+        </div>
+      </div>
+    `;
+  }
 
   legend.addTo(map);
 
@@ -884,12 +1117,14 @@ document.getElementById('centerSave').addEventListener('click', async function (
       return;
     }
 
+    const zoneColor = colorForZone(zone);
+
     const zoneLayer = L.geoJSON(zone.boundary, {
       style: function () {
         return {
-          color: '#D85A30',
+          color: zoneColor,
           weight: 2,
-          fillColor: '#D85A30',
+          fillColor: zoneColor,
           fillOpacity: 0.35
         };
       }
@@ -901,9 +1136,9 @@ document.getElementById('centerSave').addEventListener('click', async function (
     zoneLayer.bindTooltip(
       `
         <div class="zone-tooltip">
-          <b>${zone.zone_name}</b><br>
-          Type: ${zone.zone_type}<br>
-          Terminal: ${zone.terminal_name || zone.terminal_id}
+          <b>${escapeHtml(zone.zone_name)}</b><br>
+          Type: ${escapeHtml(zone.zone_type)}<br>
+          Terminal: ${escapeHtml(terminalName(zone))}
         </div>
       `,
       { sticky: true }
@@ -912,10 +1147,10 @@ document.getElementById('centerSave').addEventListener('click', async function (
     zoneLayer.bindPopup(
       `
         <div class="zone-popup">
-          <h4>${zone.zone_name}</h4>
+          <h4>${escapeHtml(zone.zone_name)}</h4>
           <p><strong>Zone ID:</strong> ${zone.zone_id}</p>
-          <p><strong>Type:</strong> ${zone.zone_type}</p>
-          <p><strong>Terminal:</strong> ${zone.terminal_name || zone.terminal_id}</p>
+          <p><strong>Type:</strong> ${escapeHtml(zone.zone_type)}</p>
+          <p><strong>Terminal:</strong> ${escapeHtml(terminalName(zone))}</p>
           <p><strong>Status:</strong> ${zone.is_active ? 'Active' : 'Inactive'}</p>
         </div>
       `
@@ -935,9 +1170,9 @@ document.getElementById('centerSave').addEventListener('click', async function (
 
         console.log('[zone] selected:', selectedZoneId, selectedZoneName);
 
-        subLayer.setStyle({ color: '#1f6f66', weight: 4 });
+        subLayer.setStyle({ color: '#111827', weight: 4 });
         setTimeout(function () {
-          subLayer.setStyle({ color: '#D85A30', weight: 2 });
+          subLayer.setStyle({ color: zoneColor, weight: 2 });
         }, 400);
       });
 
@@ -979,7 +1214,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
         title: 'Save Failed',
         icon: 'fa-exclamation-triangle',
         variant: 'danger',
-        message: error.message || 'Failed to save the reshaped zone boundary.'
+        message: escapeHtml(error.message || 'Failed to save the reshaped zone boundary.')
       });
     }
   }
@@ -1009,7 +1244,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
       confirmStyle: 'danger',
       message:
         `Are you sure you want to permanently delete this zone?<br><br>` +
-        `<strong>${selectedZoneName || 'Zone #' + selectedZoneId}</strong><br><br>` +
+        `<strong>${escapeHtml(selectedZoneName || 'Zone #' + selectedZoneId)}</strong><br><br>` +
         `Waiting vehicles in this zone will be removed from the queue. ` +
         `Past departure logs will be kept but lose the zone reference.<br><br>` +
         `<em>This action cannot be undone.</em>`
@@ -1065,7 +1300,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
         title: 'Delete Failed',
         icon: 'fa-exclamation-triangle',
         variant: 'danger',
-        message: error.message || 'Failed to delete dispatch zone.'
+        message: escapeHtml(error.message || 'Failed to delete dispatch zone.')
       });
     } finally {
       if (deleteItem) {
@@ -1085,6 +1320,8 @@ document.getElementById('centerSave').addEventListener('click', async function (
     zoneList.forEach(function (zone) {
       drawZone(zone);
     });
+
+    renderLegend(zoneList);
 
     if (zoneLayerGroup.getLayers().length === 0) {
       console.warn('No dispatch zones were returned to render.');
@@ -1121,6 +1358,9 @@ document.getElementById('centerSave').addEventListener('click', async function (
       if (!result.success) {
         throw new Error(result.message || 'Failed to load dispatch zones');
       }
+
+      // Load terminal names first so tooltips and the legend can show them
+      await loadTerminals();
 
       renderZones(result.data || []);
 
@@ -1197,8 +1437,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
         title: 'Zone Created',
         icon: 'fa-check-circle',
         variant: 'success',
-        message:
-          `<strong>${formData.zone_name}</strong> was created successfully.`
+        message: `<strong>${escapeHtml(formData.zone_name)}</strong> was created successfully.`
       });
 
     } catch (error) {
@@ -1208,7 +1447,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
         title: 'Create Failed',
         icon: 'fa-exclamation-triangle',
         variant: 'danger',
-        message: error.message || 'Failed to create dispatch zone.'
+        message: escapeHtml(error.message || 'Failed to create dispatch zone.')
       });
     } finally {
       clearActiveTool();
@@ -1270,7 +1509,6 @@ document.getElementById('centerSave').addEventListener('click', async function (
       socket.emit('admin:subscribe');
       console.log('[socket] → emitted admin:subscribe');
 
-      // Re-check on transport upgrade
       socket.io.engine.on('upgrade', function () {
         console.log('[socket] transport upgraded to', socket.io.engine.transport.name);
       });
@@ -1289,8 +1527,6 @@ document.getElementById('centerSave').addEventListener('click', async function (
     });
 
     // ---------- DEBUG: log every event the admin receives ----------
-    // This is the single most useful diagnostic — if events show up here
-    // but no dot appears, the bug is in the handler below.
     socket.onAny(function (eventName, ...args) {
       console.log('[socket] ⬅️  received event:', eventName, args);
     });
@@ -1318,6 +1554,7 @@ document.getElementById('centerSave').addEventListener('click', async function (
       }
 
       // ---- Distance filter: only show drivers within the radius ----
+      // CENTER is read at call time, so a newly saved center applies immediately
       const distanceKm = haversineKm(
         CENTER[0], CENTER[1],
         latitude, longitude
@@ -1349,8 +1586,8 @@ document.getElementById('centerSave').addEventListener('click', async function (
 
       const icon = driverDotIcon(status);
       const popupText =
-        `Driver #${driverId} — ${status}` +
-        `${zone ? ' (' + zone + ')' : ''}<br>` +
+        `Driver #${escapeHtml(driverId)} — ${escapeHtml(status)}` +
+        `${zone ? ' (' + escapeHtml(zone) + ')' : ''}<br>` +
         `Distance: ${distanceKm.toFixed(3)} km`;
 
       if (driverMarkers[driverId]) {
